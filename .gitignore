@@ -1,0 +1,32 @@
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Logs
+*.log
+logs/
+
+# Java / Maven
+**/target/
+*.class
+
+# Node / Vite
+**/node_modules/
+**/dist/
+**/.vite/
+coverage/
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Local backend configuration with credentials
+letchat_java/src/main/resources/application.yaml
+letchat_java/src/main/resources/application-*.yaml
+!letchat_java/src/main/resources/application.example.yaml
+
+# Runtime uploads and generated user files
+/files/

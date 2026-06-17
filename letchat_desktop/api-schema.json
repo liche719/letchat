@@ -1,0 +1,1994 @@
+{
+  "openapi": "3.0.1",
+  "info": {
+    "title": "OpenAPI definition",
+    "version": "v0"
+  },
+  "servers": [
+    {
+      "url": "http://localhost:5050/api",
+      "description": "Generated server url"
+    }
+  ],
+  "paths": {
+    "/userInfo/updatePassword": {
+      "post": {
+        "tags": [
+          "user-info-controller"
+        ],
+        "operationId": "updatePassword",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "pattern": "^(?=.*\\d)(?=.*[a-zA-Z])[\\da-zA-Z~!@#$%^&*_]{8,18}$",
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/userInfo/saveUserInfo": {
+      "post": {
+        "tags": [
+          "user-info-controller"
+        ],
+        "operationId": "saveUserInfo",
+        "parameters": [
+          {
+            "name": "userInfo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserInfo"
+            }
+          },
+          {
+            "name": "avatarFile",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          },
+          {
+            "name": "avatarCover",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/userInfo/logout": {
+      "post": {
+        "tags": [
+          "user-info-controller"
+        ],
+        "operationId": "logout",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/userInfo/getUserInfo": {
+      "post": {
+        "tags": [
+          "user-info-controller"
+        ],
+        "operationId": "getUserInfo",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/update/checkVersion": {
+      "post": {
+        "tags": [
+          "update-controller"
+        ],
+        "operationId": "checkVersion",
+        "parameters": [
+          {
+            "name": "version",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "uid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/saveGroup": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "saveGroup",
+        "parameters": [
+          {
+            "name": "groupId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "groupNotice",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "joinType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "avatarFile",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          },
+          {
+            "name": "avatarCover",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/loadMyGroup": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "loadMyGroup",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/leaveGroup": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "leaveGroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/getGroupInfo": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "getGroupInfo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/getGroupInfo4chat": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "getGroupInfo4chat",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/dissolutionGroup": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "dissolutionGroup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/group/addOrRemoveGroupUser": {
+      "post": {
+        "tags": [
+          "group-info-controller"
+        ],
+        "operationId": "addOrRemoveGroupUser",
+        "parameters": [
+          {
+            "name": "opType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "groupId": {
+                    "type": "string"
+                  },
+                  "selectContacts": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/search": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "search",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/loadContact": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "loadContact",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/loadApply": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "loadApply",
+        "parameters": [
+          {
+            "name": "pageNo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/getContactUserInfo": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "getContactUserInfo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/getContactInfo": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "getContactInfo",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/delContact": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "delContact",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/dealWithApply": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "dealWithApply",
+        "parameters": [
+          {
+            "name": "applyId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/applyAdd": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "applyAdd",
+        "parameters": [
+          {
+            "name": "applyInfo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contact/addContact2BlackList": {
+      "post": {
+        "tags": [
+          "user-contact-controller"
+        ],
+        "operationId": "addContact2BlackList",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/uploadFile": {
+      "post": {
+        "tags": [
+          "chat-controller"
+        ],
+        "operationId": "uploadFile",
+        "parameters": [
+          {
+            "name": "messageId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  },
+                  "coverFile": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/sendMessage": {
+      "post": {
+        "tags": [
+          "chat-controller"
+        ],
+        "operationId": "sendMessage",
+        "parameters": [
+          {
+            "name": "messageType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "fileSize",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          },
+          {
+            "name": "fileName",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "fileType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "maximum": 500,
+                "type": "object",
+                "properties": {
+                  "contactId": {
+                    "type": "string"
+                  },
+                  "messageContent": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/loadChatMessage": {
+      "post": {
+        "tags": [
+          "chat-controller"
+        ],
+        "operationId": "loadChatMessage",
+        "parameters": [
+          {
+            "name": "pageNo",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/chat/downloadFile": {
+      "post": {
+        "tags": [
+          "chat-controller"
+        ],
+        "operationId": "downloadFile",
+        "parameters": [
+          {
+            "name": "showCover",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "boolean"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK"
+          }
+        }
+      }
+    },
+    "/admin/updateUserStatus": {
+      "post": {
+        "tags": [
+          "admin-user-info-controller"
+        ],
+        "operationId": "updateUserStatus",
+        "parameters": [
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/saveUpdate": {
+      "post": {
+        "tags": [
+          "admin-app-update-controller"
+        ],
+        "operationId": "saveUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "fileType",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "outerLink",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "file",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "version": {
+                    "type": "string"
+                  },
+                  "updateDesc": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/saveSysSetting": {
+      "post": {
+        "tags": [
+          "admin-setting-controller"
+        ],
+        "operationId": "saveSysSetting",
+        "parameters": [
+          {
+            "name": "sysSettingDto",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/SysSettingDto"
+            }
+          },
+          {
+            "name": "robotFile",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          },
+          {
+            "name": "robotCover",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "binary"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/saveBeautyAccount": {
+      "post": {
+        "tags": [
+          "admin-user-info-beauty-controller"
+        ],
+        "operationId": "loadBeautyAccountList",
+        "parameters": [
+          {
+            "name": "beauty",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserInfoBeauty"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/postUpdate": {
+      "post": {
+        "tags": [
+          "admin-app-update-controller"
+        ],
+        "operationId": "postUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          },
+          {
+            "name": "grayscaleUid",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/loadUser": {
+      "post": {
+        "tags": [
+          "admin-user-info-controller"
+        ],
+        "operationId": "loadUser",
+        "parameters": [
+          {
+            "name": "userInfoQuery",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserInfoQuery"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/loadUpdateList": {
+      "post": {
+        "tags": [
+          "admin-app-update-controller"
+        ],
+        "operationId": "loadUpdateList",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/AppUpdateQuery"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/loadGroup": {
+      "post": {
+        "tags": [
+          "admin-group-controller"
+        ],
+        "operationId": "loadGroup",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/GroupInfoQuery"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/loadBeautyAccountList": {
+      "post": {
+        "tags": [
+          "admin-user-info-beauty-controller"
+        ],
+        "operationId": "loadBeautyAccountList_1",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "$ref": "#/components/schemas/UserInfoBeautyQuery"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/getSysSetting": {
+      "post": {
+        "tags": [
+          "admin-setting-controller"
+        ],
+        "operationId": "getSysSetting",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/forceOffLine": {
+      "post": {
+        "tags": [
+          "admin-user-info-controller"
+        ],
+        "operationId": "forceOffLine",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/dissolutionGroup": {
+      "post": {
+        "tags": [
+          "admin-group-controller"
+        ],
+        "operationId": "dissolutionGroup_1",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "string"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/delUpdate": {
+      "post": {
+        "tags": [
+          "admin-app-update-controller"
+        ],
+        "operationId": "delUpdate",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/admin/delBeautyAccount": {
+      "post": {
+        "tags": [
+          "admin-user-info-beauty-controller"
+        ],
+        "operationId": "delBeautyAccount",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int32"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/register": {
+      "post": {
+        "tags": [
+          "account-controller"
+        ],
+        "operationId": "register",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "pattern": "^(?=.*\\d)(?=.*[a-zA-Z])[\\da-zA-Z~!@#$%^&*_]{8,18}$",
+                "type": "object",
+                "properties": {
+                  "checkCodeKey": {
+                    "type": "string"
+                  },
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "pattern": "^(?=.*\\d)(?=.*[a-zA-Z])[\\da-zA-Z~!@#$%^&*_]{8,18}$",
+                    "type": "string"
+                  },
+                  "nickName": {
+                    "type": "string"
+                  },
+                  "checkCode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/login": {
+      "post": {
+        "tags": [
+          "account-controller"
+        ],
+        "operationId": "login",
+        "parameters": [
+          {
+            "name": "checkCodeKey",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "email": {
+                    "type": "string"
+                  },
+                  "password": {
+                    "type": "string"
+                  },
+                  "checkCode": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/getSysSetting": {
+      "post": {
+        "tags": [
+          "account-controller"
+        ],
+        "operationId": "login_1",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/account/checkCode": {
+      "post": {
+        "tags": [
+          "account-controller"
+        ],
+        "operationId": "checkCode",
+        "responses": {
+          "200": {
+            "description": "OK",
+            "content": {
+              "*/*": {
+                "schema": {
+                  "$ref": "#/components/schemas/ResponseVO"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ResponseVO": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "code": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "info": {
+            "type": "string"
+          },
+          "data": {
+            "type": "object"
+          }
+        }
+      },
+      "UserInfo": {
+        "type": "object",
+        "properties": {
+          "userId": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "nickName": {
+            "type": "string"
+          },
+          "joinType": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "password": {
+            "type": "string"
+          },
+          "personalSignature": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastLoginTime": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "areaName": {
+            "type": "string"
+          },
+          "areaCode": {
+            "type": "string"
+          },
+          "lastOffTime": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "onlineType": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SysSettingDto": {
+        "type": "object",
+        "properties": {
+          "maxGroupCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxGroupMemberCount": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxImageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxVideoSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "maxFileSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "robotUid": {
+            "type": "string"
+          },
+          "robotNickName": {
+            "type": "string"
+          },
+          "robotWelcome": {
+            "type": "string"
+          }
+        }
+      },
+      "UserInfoBeauty": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "email": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "SimplePage": {
+        "type": "object",
+        "properties": {
+          "pageNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "countTotal": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageTotal": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "start": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "end": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      },
+      "UserInfoQuery": {
+        "type": "object",
+        "properties": {
+          "simplePage": {
+            "$ref": "#/components/schemas/SimplePage"
+          },
+          "pageNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userIdFuzzy": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "emailFuzzy": {
+            "type": "string"
+          },
+          "nickName": {
+            "type": "string"
+          },
+          "nickNameFuzzy": {
+            "type": "string"
+          },
+          "joinType": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "sex": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "password": {
+            "type": "string"
+          },
+          "passwordFuzzy": {
+            "type": "string"
+          },
+          "personalSignature": {
+            "type": "string"
+          },
+          "personalSignatureFuzzy": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "createTime": {
+            "type": "string"
+          },
+          "createTimeStart": {
+            "type": "string"
+          },
+          "createTimeEnd": {
+            "type": "string"
+          },
+          "lastLoginTime": {
+            "type": "string"
+          },
+          "lastLoginTimeStart": {
+            "type": "string"
+          },
+          "lastLoginTimeEnd": {
+            "type": "string"
+          },
+          "areaName": {
+            "type": "string"
+          },
+          "areaNameFuzzy": {
+            "type": "string"
+          },
+          "areaCode": {
+            "type": "string"
+          },
+          "areaCodeFuzzy": {
+            "type": "string"
+          },
+          "lastOffTime": {
+            "type": "integer",
+            "format": "int64"
+          }
+        }
+      },
+      "AppUpdateQuery": {
+        "type": "object",
+        "properties": {
+          "simplePage": {
+            "$ref": "#/components/schemas/SimplePage"
+          },
+          "pageNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "version": {
+            "type": "string"
+          },
+          "versionFuzzy": {
+            "type": "string"
+          },
+          "updateDesc": {
+            "type": "string"
+          },
+          "updateDescFuzzy": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string"
+          },
+          "createTimeStart": {
+            "type": "string"
+          },
+          "createTimeEnd": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "grayscaleUid": {
+            "type": "string"
+          },
+          "grayscaleUidFuzzy": {
+            "type": "string"
+          },
+          "fileType": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "outerLink": {
+            "type": "string"
+          },
+          "outerLinkFuzzy": {
+            "type": "string"
+          }
+        }
+      },
+      "GroupInfoQuery": {
+        "type": "object",
+        "properties": {
+          "simplePage": {
+            "$ref": "#/components/schemas/SimplePage"
+          },
+          "pageNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "groupId": {
+            "type": "string"
+          },
+          "groupIdFuzzy": {
+            "type": "string"
+          },
+          "groupName": {
+            "type": "string"
+          },
+          "groupNameFuzzy": {
+            "type": "string"
+          },
+          "groupOwnerId": {
+            "type": "string"
+          },
+          "groupOwnerIdFuzzy": {
+            "type": "string"
+          },
+          "createTime": {
+            "type": "string"
+          },
+          "createTimeStart": {
+            "type": "string"
+          },
+          "createTimeEnd": {
+            "type": "string"
+          },
+          "groupNotice": {
+            "type": "string"
+          },
+          "groupNoticeFuzzy": {
+            "type": "string"
+          },
+          "joinType": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "queryGroupOwnerNickName": {
+            "type": "boolean"
+          },
+          "queryMemberCount": {
+            "type": "boolean"
+          }
+        }
+      },
+      "UserInfoBeautyQuery": {
+        "type": "object",
+        "properties": {
+          "simplePage": {
+            "$ref": "#/components/schemas/SimplePage"
+          },
+          "pageNo": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "pageSize": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "orderBy": {
+            "type": "string"
+          },
+          "id": {
+            "type": "integer",
+            "format": "int32"
+          },
+          "email": {
+            "type": "string"
+          },
+          "emailFuzzy": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "userIdFuzzy": {
+            "type": "string"
+          },
+          "status": {
+            "type": "integer",
+            "format": "int32"
+          }
+        }
+      }
+    }
+  }
+}
