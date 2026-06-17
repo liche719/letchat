@@ -3,8 +3,10 @@ package com.letchat.ai;
 import com.alibaba.fastjson.JSON;
 import com.alibaba.fastjson.JSONArray;
 import com.alibaba.fastjson.JSONObject;
+import com.letchat.utils.StringTools;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.*;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 import java.util.*;
@@ -16,8 +18,15 @@ import java.util.concurrent.TimeUnit;
 public class KimiAIService {
 
     private static final String BASE_URL = "https://api.moonshot.cn/v1/chat/completions";
-    private static final String API_KEY = "sk-s0KJfdvQF6XG86A60sGKxBONO35eEkF3Ev0cc08t7OKWpyBc";
-    private static final String MODEL = "moonshot-v1-8k";
+
+    @Value("${kimi.enabled:false}")
+    private Boolean enabled;
+
+    @Value("${kimi.api-key:}")
+    private String apiKey;
+
+    @Value("${kimi.model:moonshot-v1-8k}")
+    private String model;
 
     // 存储每个用户的对话历史，实际项目中建议使用Redis等外部存储
     private final Map<String, Deque<JSONObject>> sessionHistories = new ConcurrentHashMap<>();
@@ -39,6 +48,10 @@ public class KimiAIService {
      * @return AI 回复内容
      */
     public String getAiReplyWithContext(String userId, String userMessage) {
+        if (!Boolean.TRUE.equals(enabled) || StringTools.isEmpty(apiKey)) {
+            return "AI 服务暂时不可用，请稍后再试。";
+        }
+
         // 获取或创建该会话的历史记录
         Deque<JSONObject> history = sessionHistories.computeIfAbsent(userId, k -> new ArrayDeque<>());
 
@@ -54,7 +67,7 @@ public class KimiAIService {
             messages.addAll(history);
 
             JSONObject requestBody = new JSONObject();
-            requestBody.put("model", MODEL);
+            requestBody.put("model", model);
             requestBody.put("max_tokens", 1024);
             requestBody.put("messages", messages);
 
@@ -65,7 +78,7 @@ public class KimiAIService {
 
             Request request = new Request.Builder()
                     .url(BASE_URL)
-                    .addHeader("Authorization", "Bearer " + API_KEY)
+                    .addHeader("Authorization", "Bearer " + apiKey)
                     .addHeader("Content-Type", "application/json")
                     .post(body)
                     .build();

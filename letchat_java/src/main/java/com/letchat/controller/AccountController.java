@@ -9,7 +9,7 @@ import com.letchat.exception.BusinessException;
 import com.letchat.redis.RedisComponent;
 import com.letchat.service.UserInfoService;
 import com.letchat.utils.StringTools;
-import com.wf.captcha.ArithmeticCaptcha;
+import com.wf.captcha.SpecCaptcha;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.validation.annotation.Validated;
@@ -41,7 +41,7 @@ public class AccountController extends ABaseController {
 
     @RequestMapping("/checkCode")
     public ResponseVO checkCode() {
-        ArithmeticCaptcha captcha = new ArithmeticCaptcha(100, 42); //创建验证码，图片宽高
+        SpecCaptcha captcha = new SpecCaptcha(100, 42, 4); //创建验证码，图片宽高
         String code = captcha.text();
         String checkCodeKey = UUID.randomUUID().toString();
         redisTemplate.opsForValue().set(Constants.REDIS_KEY_CHECK_CODE + checkCodeKey, code, Constants.REDIS_TIME_1MIN * 5L, TimeUnit.SECONDS);
@@ -64,7 +64,7 @@ public class AccountController extends ABaseController {
             if (!checkCode.equalsIgnoreCase(redisTemplate.opsForValue().get(Constants.REDIS_KEY_CHECK_CODE + checkCodeKey))) {
                 throw new BusinessException("图片验证码不正确");
             }
-            userInfoService.register(email, nickName, StringTools.encodeMD5(password));
+            userInfoService.register(email, nickName, password);
             return getSuccessResponseVO(null);
         } finally {
             redisTemplate.delete(Constants.REDIS_KEY_CHECK_CODE + checkCodeKey);

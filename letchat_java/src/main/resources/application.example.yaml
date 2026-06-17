@@ -63,3 +63,8 @@ project:
 
 admin:
   emails: ${ADMIN_EMAILS:admin@example.com}
+
+kimi:
+  enabled: ${KIMI_ENABLED:false}
+  api-key: ${KIMI_API_KEY:}
+  model: ${KIMI_MODEL:moonshot-v1-8k}
