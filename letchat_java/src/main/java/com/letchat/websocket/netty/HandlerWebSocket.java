@@ -10,8 +10,6 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -46,8 +44,7 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
     @Override
     protected void channelRead0(ChannelHandlerContext ctx, TextWebSocketFrame textWebSocketFrame) throws Exception {
         Channel channel = ctx.channel();
-        Attribute<String> attribute = channel.attr(AttributeKey.valueOf(channel.id().toString()));
-        String userId = attribute.get();
+        String userId = ChannelContextUtils.getUserId(channel);
         log.info("收到userId={}消息：{}", userId, textWebSocketFrame.text());
         redisComponent.saveHeartBeat(userId);
     }

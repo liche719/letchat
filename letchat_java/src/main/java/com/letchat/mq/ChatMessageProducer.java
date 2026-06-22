@@ -3,30 +3,54 @@ package com.letchat.mq;
 import com.alibaba.fastjson.JSON;
 import com.letchat.config.RabbitMQConfig;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.amqp.AmqpException;
+import org.springframework.amqp.rabbit.connection.CorrelationData;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.stereotype.Component;
 
+import javax.annotation.PostConstruct;
 import javax.annotation.Resource;
+import java.util.UUID;
 
 @Component("chatMessageProducer")
 @Slf4j
 public class ChatMessageProducer<T> {
-    
+
     @Resource
     private RabbitTemplate rabbitTemplate;
-    
-    public void saveChatMessage(T t) {
+
+    @PostConstruct
+    public void configurePublisherCallbacks() {
+        rabbitTemplate.setMandatory(true);
+        rabbitTemplate.setConfirmCallback((correlationData, ack, cause) -> {
+            if (!ack) {
+                String id = correlationData == null ? "unknown" : correlationData.getId();
+                log.error("RabbitMQ did not confirm chat message, correlationId={}, cause={}", id, cause);
+            }
+        });
+        rabbitTemplate.setReturnsCallback(returned -> log.error(
+                "RabbitMQ returned unroutable chat message, exchange={}, routingKey={}, replyCode={}, replyText={}",
+                returned.getExchange(),
+                returned.getRoutingKey(),
+                returned.getReplyCode(),
+                returned.getReplyText()
+        ));
+    }
+
+    public void saveChatMessage(T payload) {
+        String message = JSON.toJSONString(payload);
+        CorrelationData correlationData = new CorrelationData("chat-message-" + UUID.randomUUID());
         try {
-            String message = JSON.toJSONString(t);
             rabbitTemplate.convertAndSend(
                     RabbitMQConfig.CHAT_MESSAGE_EXCHANGE,
                     RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY,
-                    message
+                    message,
+                    correlationData
             );
-            log.info("发送消息到RabbitMQ: {}", message);
-        } catch (Exception e) {
-            log.error("发送消息到RabbitMQ失败", e);
-            // 可以考虑添加消息重试机制或日志记录
+            log.info("Sent chat message to RabbitMQ, correlationId={}, payload={}", correlationData.getId(), message);
+        } catch (AmqpException e) {
+            log.error("Failed to send chat message to RabbitMQ, payload={}", message, e);
+            throw e;
         }
     }
 }

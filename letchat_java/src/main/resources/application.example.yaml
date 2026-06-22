@@ -31,11 +31,17 @@ spring:
     username: ${RABBITMQ_USERNAME:letchat}
     password: ${RABBITMQ_PASSWORD:change-me}
     virtual-host: ${RABBITMQ_VIRTUAL_HOST:/}
+    publisher-confirm-type: correlated
+    publisher-returns: true
+    template:
+      mandatory: true
     listener:
       simple:
         concurrency: ${RABBITMQ_LISTENER_CONCURRENCY:5}
         max-concurrency: ${RABBITMQ_LISTENER_MAX_CONCURRENCY:10}
+        prefetch: ${RABBITMQ_LISTENER_PREFETCH:20}
         acknowledge-mode: manual
+        default-requeue-rejected: false
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:10000}
 
 logging:

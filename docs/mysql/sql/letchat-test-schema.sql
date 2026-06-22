@@ -111,6 +111,7 @@ CREATE TABLE chat_message (
   file_type int DEFAULT NULL,
   status int DEFAULT NULL,
   PRIMARY KEY (message_id),
+  UNIQUE KEY uk_message_fingerprint (session_id, send_user_id, contact_id, send_time, message_type),
   KEY idx_session_time (session_id, send_time),
   KEY idx_contact_time (contact_id, send_time),
   KEY idx_send_contact (send_user_id, contact_id)

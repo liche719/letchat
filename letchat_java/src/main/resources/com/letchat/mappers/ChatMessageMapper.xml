@@ -220,6 +220,9 @@
         </selectKey>
         INSERT INTO chat_message
         <trim prefix="(" suffix=")" suffixOverrides=",">
+            <if test="bean.messageId != null">
+                message_id,
+            </if>
             <if test="bean.sessionId != null">
                 session_id,
             </if>
@@ -526,6 +529,17 @@
     <select id="selectByMessageId" resultMap="base_result_map">
         select *
         from chat_message c where message_id=#{messageId}
+    </select>
+
+    <select id="selectByMessageFingerprint" resultMap="base_result_map">
+        select *
+        from chat_message c
+        where c.session_id = #{bean.sessionId}
+          and c.send_user_id = #{bean.sendUserId}
+          and c.contact_id = #{bean.contactId}
+          and c.send_time = #{bean.sendTime}
+          and c.message_type = #{bean.messageType}
+        limit 1
     </select>
 
 </mapper>

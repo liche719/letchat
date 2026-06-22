@@ -43,6 +43,8 @@ public class ChannelContextUtils {
 
     private static final ConcurrentHashMap<String, ChannelGroup> GROUP_CONTEXT_MAP = new ConcurrentHashMap<>();
 
+    private static final AttributeKey<String> USER_ID_ATTRIBUTE = AttributeKey.valueOf("letchat.userId");
+
     @Resource
     private UserInfoMapper<UserInfo, UserInfoQuery> userInfoMapper;
 
@@ -61,14 +63,7 @@ public class ChannelContextUtils {
 
     //添加用户连接
     public void addContext(String userId, Channel channel) {
-        String channelId = channel.id().toString();
-        AttributeKey attributeKey = null;
-        if (!AttributeKey.exists(channelId)) {
-            attributeKey = AttributeKey.newInstance(channelId);
-        } else {
-            attributeKey = AttributeKey.valueOf(channelId);
-        }
-        channel.attr(attributeKey).set(userId);
+        bindUserChannel(userId, channel);
 
         List<String> contactIdList = redisComponent.getUserContactList(userId);
         System.out.println("用户" + userId + "的群组：" + contactIdList);
@@ -78,7 +73,6 @@ public class ChannelContextUtils {
             }
         }
 
-        USER_CONTEXT_MAP.put(userId, channel);
         redisComponent.saveHeartBeat(userId);
 
         //更新用户最后连接时间
@@ -139,22 +133,23 @@ public class ChannelContextUtils {
     }
 
     private void add2Group(String groupId, Channel channel) {
-        ChannelGroup group = GROUP_CONTEXT_MAP.get(groupId);
-        if (group == null) {
-            group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
-            GROUP_CONTEXT_MAP.put(groupId, group);
-        }
         if (channel == null) {
             return;
         }
+        ChannelGroup group = getOrCreateGroup(groupId);
         group.add(channel);
     }
 
     public void removeContext(Channel channel) {
-        Attribute<String> attribute = channel.attr(AttributeKey.valueOf(channel.id().toString()));
-        String userId = attribute.get();
-        if (!StringTools.isEmpty(userId)) {
-            USER_CONTEXT_MAP.remove(userId);
+        String userId = getUserId(channel);
+        if (StringTools.isEmpty(userId)) {
+            removeChannelFromGroups(channel);
+            return;
+        }
+        boolean removedCurrentChannel = USER_CONTEXT_MAP.remove(userId, channel);
+        removeChannelFromGroups(channel);
+        if (!removedCurrentChannel) {
+            return;
         }
         redisComponent.removeUserHeartBeat(userId);
         //更新用户最后离线时间
@@ -256,14 +251,45 @@ public class ChannelContextUtils {
             return;
         }
 
-        // 获取群组对应的ChannelGroup，如果不存在则创建
-        ChannelGroup group = GROUP_CONTEXT_MAP.get(groupId);
-        if (group == null) {
-            group = new DefaultChannelGroup(GlobalEventExecutor.INSTANCE);
-            GROUP_CONTEXT_MAP.put(groupId, group);
-        }
+        ChannelGroup group = getOrCreateGroup(groupId);
 
         // 将用户Channel添加到群组ChannelGroup中
         group.add(userChannel);
+    }
+
+    static void clearLocalContexts() {
+        USER_CONTEXT_MAP.clear();
+        GROUP_CONTEXT_MAP.clear();
+    }
+
+    void bindUserChannel(String userId, Channel channel) {
+        channel.attr(USER_ID_ATTRIBUTE).set(userId);
+        Channel previousChannel = USER_CONTEXT_MAP.put(userId, channel);
+        if (previousChannel != null && previousChannel != channel) {
+            removeChannelFromGroups(previousChannel);
+            previousChannel.close();
+        }
+    }
+
+    int getGroupConnectionCount(String groupId) {
+        ChannelGroup group = GROUP_CONTEXT_MAP.get(groupId);
+        return group == null ? 0 : group.size();
+    }
+
+    int getOnlineUserCount() {
+        return USER_CONTEXT_MAP.size();
+    }
+
+    public static String getUserId(Channel channel) {
+        Attribute<String> attribute = channel.attr(USER_ID_ATTRIBUTE);
+        return attribute.get();
+    }
+
+    private ChannelGroup getOrCreateGroup(String groupId) {
+        return GROUP_CONTEXT_MAP.computeIfAbsent(groupId, key -> new DefaultChannelGroup(GlobalEventExecutor.INSTANCE));
+    }
+
+    private void removeChannelFromGroups(Channel channel) {
+        GROUP_CONTEXT_MAP.values().forEach(group -> group.remove(channel));
     }
 }

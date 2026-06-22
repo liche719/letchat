@@ -25,4 +25,10 @@ public interface ChatMessageMapper<T,P> extends BaseMapper<T,P> {
 	 T selectByMessageId(@Param("messageId") Long messageId);
 
 
+	/**
+	 * 根据消息指纹获取对象，用于MQ重投幂等判断
+	 */
+	 T selectByMessageFingerprint(@Param("bean") T t);
+
+
 }
