@@ -1,293 +1,361 @@
+import { computed, ref } from 'vue'
 import { defineStore } from 'pinia'
-import { ref, computed } from 'vue'
-import type { ContactInfo, ChatMessage, GroupInfo } from '@/types/api'
-import request from '@/utils/request'
-import { useUserStore } from './user'
+import { ElMessage } from 'element-plus'
+import { chatApi } from '@/api/chat'
+import { contactApi } from '@/api/contact'
+import { useUserStore } from '@/stores/user'
+import type {
+  BackendChatMessage,
+  BackendContact,
+  ChatMessage,
+  ContactInfo,
+  ContactKind,
+  WsInitData,
+  WsMessage,
+} from '@/types/api'
+
+const TEXT_MESSAGE = 2
+const MEDIA_MESSAGE = 5
+const INIT_MESSAGE = 0
+
+function toContactKind(type: unknown): ContactKind {
+  if (type === 'G' || type === 'GROUP' || type === 1 || type === '1') return 'G'
+  return 'U'
+}
+
+function contactTypeCode(kind: ContactKind) {
+  return kind === 'G' ? 1 : 0
+}
+
+function normalizeTime(time?: number | string) {
+  if (typeof time === 'number') return time
+  if (typeof time === 'string') {
+    const parsed = new Date(time).getTime()
+    return Number.isNaN(parsed) ? Date.now() : parsed
+  }
+  return Date.now()
+}
+
+function safeText(value?: string) {
+  return value?.trim() || ''
+}
 
 export const useChatStore = defineStore('chat', () => {
   const userStore = useUserStore()
-  
-  // 状态
   const contacts = ref<ContactInfo[]>([])
   const currentContact = ref<ContactInfo | null>(null)
   const messages = ref<ChatMessage[]>([])
-  const myGroups = ref<GroupInfo[]>([])
+  const loadingContacts = ref(false)
+  const loadingMessages = ref(false)
+  const sending = ref(false)
+  const pendingApplyCount = ref(0)
+  const keyword = ref('')
+  const activeFilter = ref<'all' | 'U' | 'G'>('all')
 
-  // 计算属性
-  const unreadTotal = computed(() => 
-    contacts.value.reduce((total, contact) => total + (contact.unreadCount || 0), 0)
-  )
+  let removeSocketListener: (() => void) | null = null
 
-  // 加载联系人列表
-  const loadContacts = async () => {
-    try {
-      const [friendsResponse, groupsResponse] = await Promise.all([
-        request.post('/contact/loadContact', null, { params: { contactType: 'U' } }),
-        request.post('/contact/loadContact', null, { params: { contactType: 'G' } })
-      ])
-      
-      const friends = friendsResponse.data || []
-      const groups = groupsResponse.data || []
-      
-      contacts.value = [...friends, ...groups]
-    } catch (error) {
-      console.error('加载联系人失败:', error)
+  const filteredContacts = computed(() => {
+    const text = keyword.value.trim().toLowerCase()
+    return contacts.value.filter((contact) => {
+      const matchFilter = activeFilter.value === 'all' || contact.contactType === activeFilter.value
+      const matchText =
+        !text ||
+        contact.contactName.toLowerCase().includes(text) ||
+        contact.contactId.toLowerCase().includes(text)
+      return matchFilter && matchText
+    })
+  })
+
+  const unreadTotal = computed(() => contacts.value.reduce((sum, item) => sum + (item.unreadCount || 0), 0))
+
+  function avatarSeed(name: string) {
+    return safeText(name).slice(0, 2).toUpperCase() || 'LC'
+  }
+
+  function normalizeContact(raw: BackendContact): ContactInfo {
+    const kind = toContactKind(raw.contactType)
+    return {
+      userId: raw.userId,
+      contactId: raw.contactId,
+      contactName: raw.contactName || raw.contactId,
+      contactType: kind,
+      contactTypeCode: contactTypeCode(kind),
+      status: raw.status,
+      sex: raw.sex,
+      createTime: raw.createTime,
+      lastUpdateTime: raw.lastUpdateTime,
+      lastMessage: raw.lastMessage || '',
+      lastReceiveTime: raw.lastReceiveTime,
+      unreadCount: 0,
+      memberCount: raw.memberCount,
     }
   }
 
-  // 加载我的群组
-  const loadMyGroups = async () => {
-    try {
-      const response = await request.post('/contact/loadContact', null, { params: { contactType: 'G' } })
-      myGroups.value = response.data || []
-    } catch (error) {
-      console.error('加载群组失败:', error)
+  function resolveConversationId(raw: BackendChatMessage) {
+    const selfId = userStore.userInfo?.userId
+    if (raw.contactType === 1) return raw.contactId || ''
+    if (raw.sendUserId && raw.sendUserId !== selfId) return raw.sendUserId
+    return raw.contactId || raw.sendUserId || ''
+  }
+
+  function normalizeMessage(raw: BackendChatMessage, status: ChatMessage['sendStatus'] = 'received'): ChatMessage {
+    const contactId = resolveConversationId(raw)
+    return {
+      messageId: String(raw.messageId || `ws-${raw.sendTime || Date.now()}-${Math.random().toString(16).slice(2)}`),
+      sessionId: raw.sessionId,
+      contactId,
+      rawContactId: raw.contactId,
+      contactName: raw.contactName,
+      contactType: raw.contactType,
+      senderId: raw.sendUserId || '',
+      senderName: raw.sendUserNickName || raw.sendUserId || '未知用户',
+      messageContent: raw.messageContent || '',
+      messageType: raw.messageType,
+      sendTime: normalizeTime(raw.sendTime),
+      sendStatus: status,
+      status: raw.status,
+      fileSize: raw.fileSize,
+      fileName: raw.fileName,
+      fileType: raw.fileType,
+      extendData: raw.extendData,
     }
   }
 
-  // 搜索联系人
-  const searchContacts = async (keyword: string) => {
-    try {
-      const response = await request.post('/contact/search', null, { params: { contactId: keyword } })
-      return response.data || []
-    } catch (error) {
-      console.error('搜索联系人失败:', error)
-      return []
-    }
+  function sortContacts() {
+    contacts.value.sort((a, b) => normalizeTime(b.lastReceiveTime) - normalizeTime(a.lastReceiveTime))
   }
 
-  // 加载聊天记录
-  const loadMessages = async (contactId: string, pageNo: number = 1) => {
-    try {
-      const response = await request.post('/chat/loadChatMessage', null, {
-        params: { contactId, contactType: 1, pageNo }
-      })
-      
-      const messageList = response.data?.list || []
-      
-      // 映射后端字段到前端字段
-      const mappedMessages = messageList.map((msg: any) => ({
-        messageId: msg.messageId?.toString() || '',
-        contactId: msg.contactId || '',
-        senderId: msg.sendUserId || '',
-        senderName: msg.sendUserNickName || '',
-        senderAvatar: '', // 后端没有返回头像，使用默认值
-        messageContent: msg.messageContent || '',
-        messageType: msg.messageType || 2,
-        sendTime: msg.sendTime ? new Date(msg.sendTime).toISOString() : new Date().toISOString(),
-        sendStatus: 2, // 已发送状态
-        fileName: msg.fileName || '',
-        fileSize: msg.fileSize || 0,
-        fileType: msg.fileType || 2,
-        fileUrl: msg.fileUrl || '',
-        coverUrl: msg.coverUrl || ''
-      }))
-      
-      // 按发送时间升序排序（最新消息在最后）
-      const sortedMessages = mappedMessages.sort((a: ChatMessage, b: ChatMessage) => 
-        new Date(a.sendTime).getTime() - new Date(b.sendTime).getTime()
-      )
-      
-      if (pageNo === 1) {
-        messages.value = sortedMessages
-      } else {
-        messages.value.unshift(...sortedMessages)
-      }
-      
-      return sortedMessages
-    } catch (error) {
-      console.error('加载聊天记录失败:', error)
-      return []
+  function upsertContact(next: ContactInfo) {
+    const index = contacts.value.findIndex((item) => item.contactId === next.contactId)
+    if (index >= 0) {
+      contacts.value[index] = { ...contacts.value[index], ...next }
+    } else {
+      contacts.value.push(next)
     }
+    sortContacts()
   }
 
-  // 发送消息
-  const sendMessage = async (content: string, messageType: number = 2) => {
-    if (!currentContact.value) return
+  function updateContactSummary(message: ChatMessage, countUnread: boolean) {
+    const index = contacts.value.findIndex((item) => item.contactId === message.contactId)
+    if (index < 0) return
 
-    // 创建临时消息对象
-    const tempMessage: ChatMessage = {
-      messageId: Date.now().toString(),
-      contactId: currentContact.value.contactId,
-      senderId: userStore.userInfo?.userId || '',
-      senderName: userStore.userInfo?.nickName || '',
-      senderAvatar: userStore.userInfo?.avatar || '',
-      messageContent: content,
-      messageType,
-      sendTime: new Date().toISOString(),
-      sendStatus: 1, // 发送中
-      fileName: '',
-      fileSize: 0,
-      fileType: 2,
-      fileUrl: '',
-      coverUrl: ''
+    const contact = contacts.value[index]
+    contact.lastMessage = message.messageType === MEDIA_MESSAGE ? message.fileName || '[媒体文件]' : message.messageContent
+    contact.lastReceiveTime = message.sendTime
+    if (countUnread && currentContact.value?.contactId !== contact.contactId) {
+      contact.unreadCount = (contact.unreadCount || 0) + 1
     }
-
-    // 先添加到本地消息列表
-    if (currentContact.value && currentContact.value.contactId === tempMessage.contactId) {
-      messages.value.push(tempMessage)
-    }
-
-    try {
-      const response = await request.post('/chat/sendMessage', null, {
-        params: {
-          contactId: currentContact.value.contactId,
-          messageContent: content,
-          messageType,
-          fileSize: 0,
-          fileName: '',
-          fileType: 2
-        }
-      })
-
-      // 更新消息状态为已发送
-      const sentMessage = messages.value.find(m => m.messageId === tempMessage.messageId)
-      if (sentMessage) {
-        sentMessage.sendStatus = 2
-        sentMessage.messageId = response.data.messageId
-      }
-
-      return response.data
-    } catch (error) {
-      // 更新消息状态为发送失败
-      const failedMessage = messages.value.find(m => m.messageId === tempMessage.messageId)
-      if (failedMessage) {
-        failedMessage.sendStatus = 3
-      }
-      console.error('发送消息失败:', error)
-      throw error
-    }
+    sortContacts()
   }
 
-  // 发送媒体消息
-  const sendMediaMessage = async (file: File, messageType: number = 5) => {
-    if (!currentContact.value) return
-
-    // 创建临时消息对象
-    const tempMessage: ChatMessage = {
-      messageId: Date.now().toString(),
-      contactId: currentContact.value.contactId,
-      senderId: userStore.userInfo?.userId || '',
-      senderName: userStore.userInfo?.nickName || '',
-      senderAvatar: userStore.userInfo?.avatar || '',
-      messageContent: '',
-      messageType,
-      sendTime: new Date().toISOString(),
-      sendStatus: 1, // 发送中
-      fileName: file.name,
-      fileSize: file.size,
-      fileType: messageType,
-      fileUrl: '',
-      coverUrl: ''
+  function upsertMessage(message: ChatMessage) {
+    const currentId = currentContact.value?.contactId
+    if (!currentId || message.contactId !== currentId) {
+      updateContactSummary(message, true)
+      return
     }
 
-    // 先添加到本地消息列表
-    if (currentContact.value && currentContact.value.contactId === tempMessage.contactId) {
-      messages.value.push(tempMessage)
-    }
+    const index = messages.value.findIndex((item) => {
+      if (message.localId && item.localId === message.localId) return true
+      return item.messageId === message.messageId
+    })
 
-    try {
-      // 1. 先发送消息获取messageId
-      const messageResponse = await request.post('/chat/sendMessage', null, {
-        params: {
-          contactId: currentContact.value.contactId,
-          messageContent: '',
-          messageType,
-          fileSize: file.size,
-          fileName: file.name,
-          fileType: messageType
-        }
-      })
-
-      const messageId = messageResponse.data.messageId
-
-      // 2. 上传文件
-      const formData = new FormData()
-      formData.append('messageId', messageId)
-      formData.append('file', file)
-      formData.append('coverFile', file) // 暂时使用相同文件作为coverFile
-      
-      await request.post('/chat/uploadFile', formData)
-
-      // 更新消息状态为已发送
-      const sentMessage = messages.value.find(m => m.messageId === tempMessage.messageId)
-      if (sentMessage) {
-        sentMessage.sendStatus = 2
-        sentMessage.messageId = messageId
-        sentMessage.fileUrl = `/chat/downloadFile/${file.name}`
-      }
-
-      return messageResponse.data
-    } catch (error) {
-      // 更新消息状态为发送失败
-      const failedMessage = messages.value.find(m => m.messageId === tempMessage.messageId)
-      if (failedMessage) {
-        failedMessage.sendStatus = 3
-      }
-      console.error('发送媒体消息失败:', error)
-      throw error
-    }
-  }
-
-  // 发送文件消息（兼容Chat.vue中的调用方式）
-  const sendFileMessage = async ({ contactId, file, messageType }: {
-    contactId: string
-    file: File
-    messageType: number
-  }) => {
-    if (!currentContact.value || currentContact.value.contactId !== contactId) return
-    return sendMediaMessage(file, messageType)
-  }
-
-  // 设置当前联系人
-  const setCurrentContact = async (contact: ContactInfo) => {
-    currentContact.value = contact
-    if (contact) {
-      await loadMessages(contact.contactId)
-    }
-  }
-
-  // 接收WebSocket消息
-  const receiveMessage = (message: ChatMessage) => {
-    // 如果消息是当前聊天对象的，添加到消息列表
-    if (currentContact.value && message.contactId === currentContact.value.contactId) {
+    if (index >= 0) {
+      messages.value[index] = { ...messages.value[index], ...message }
+    } else {
       messages.value.push(message)
     }
-    
-    // 更新联系人未读数
-    const contact = contacts.value.find(c => c.contactId === message.contactId)
-    if (contact) {
-      contact.lastMessage = message.messageContent
-      contact.lastMessageTime = message.sendTime
-      if (!currentContact.value || currentContact.value.contactId !== message.contactId) {
-        contact.unreadCount = (contact.unreadCount || 0) + 1
-      }
+    messages.value.sort((a, b) => a.sendTime - b.sendTime)
+    updateContactSummary(message, false)
+  }
+
+  async function loadContacts() {
+    loadingContacts.value = true
+    try {
+      const [friends, groups] = await Promise.all([contactApi.loadContact('U'), contactApi.loadContact('G')])
+      const unreadMap = new Map(contacts.value.map((item) => [item.contactId, item.unreadCount || 0]))
+      contacts.value = [...(friends.data || []), ...(groups.data || [])].map((raw) => {
+        const contact = normalizeContact(raw)
+        contact.unreadCount = unreadMap.get(contact.contactId) || 0
+        return contact
+      })
+      sortContacts()
+    } finally {
+      loadingContacts.value = false
     }
   }
 
-  // 清空未读数
-  const clearUnreadCount = (contactId: string) => {
-    const contact = contacts.value.find(c => c.contactId === contactId)
-    if (contact) {
-      contact.unreadCount = 0
+  async function loadMessages(contactId: string, pageNo = 1) {
+    loadingMessages.value = true
+    try {
+      const response = await chatApi.loadChatMessage(contactId, pageNo)
+      const list = (response.data?.list || []).map((item) => normalizeMessage(item, 'received'))
+      list.sort((a, b) => a.sendTime - b.sendTime)
+      messages.value = pageNo === 1 ? list : [...list, ...messages.value]
+      return list
+    } finally {
+      loadingMessages.value = false
     }
+  }
+
+  async function setCurrentContact(contact: ContactInfo) {
+    currentContact.value = contact
+    contact.unreadCount = 0
+    await loadMessages(contact.contactId)
+  }
+
+  function clearCurrentContact() {
+    currentContact.value = null
+    messages.value = []
+  }
+
+  async function sendMessage(content: string) {
+    if (!currentContact.value) return null
+    const text = content.trim()
+    if (!text) return null
+
+    sending.value = true
+    const localId = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const optimistic: ChatMessage = {
+      messageId: localId,
+      localId,
+      contactId: currentContact.value.contactId,
+      contactType: currentContact.value.contactTypeCode,
+      senderId: userStore.userInfo?.userId || '',
+      senderName: userStore.displayName,
+      messageContent: text,
+      messageType: TEXT_MESSAGE,
+      sendTime: Date.now(),
+      sendStatus: 'sending',
+    }
+    upsertMessage(optimistic)
+
+    try {
+      const response = await chatApi.sendMessage({
+        contactId: currentContact.value.contactId,
+        messageContent: text,
+        messageType: TEXT_MESSAGE,
+      })
+      const saved = normalizeMessage(response.data, 'sent')
+      saved.localId = localId
+      upsertMessage(saved)
+      return saved
+    } catch (error) {
+      upsertMessage({ ...optimistic, sendStatus: 'failed' })
+      throw error
+    } finally {
+      sending.value = false
+    }
+  }
+
+  async function sendFileMessage(file: File) {
+    if (!currentContact.value) return null
+    sending.value = true
+    const localId = `local-file-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const optimistic: ChatMessage = {
+      messageId: localId,
+      localId,
+      contactId: currentContact.value.contactId,
+      contactType: currentContact.value.contactTypeCode,
+      senderId: userStore.userInfo?.userId || '',
+      senderName: userStore.displayName,
+      messageContent: file.name,
+      messageType: MEDIA_MESSAGE,
+      sendTime: Date.now(),
+      sendStatus: 'sending',
+      fileName: file.name,
+      fileSize: file.size,
+      fileType: MEDIA_MESSAGE,
+    }
+    upsertMessage(optimistic)
+
+    try {
+      const response = await chatApi.sendMessage({
+        contactId: currentContact.value.contactId,
+        messageContent: file.name,
+        messageType: MEDIA_MESSAGE,
+        fileSize: file.size,
+        fileName: file.name,
+        fileType: MEDIA_MESSAGE,
+      })
+      const messageId = String(response.data.messageId)
+      await chatApi.uploadFile(messageId, file)
+      const saved = normalizeMessage(response.data, 'sent')
+      saved.localId = localId
+      upsertMessage(saved)
+      return saved
+    } catch (error) {
+      upsertMessage({ ...optimistic, sendStatus: 'failed' })
+      throw error
+    } finally {
+      sending.value = false
+    }
+  }
+
+  function mergeInitData(data: WsInitData) {
+    pendingApplyCount.value = data.applyCount || 0
+    data.chatSessionUserList?.forEach((session) => upsertContact(normalizeContact(session)))
+    data.chatMessagesList?.forEach((raw) => {
+      const message = normalizeMessage(raw, 'received')
+      if (currentContact.value?.contactId === message.contactId) {
+        upsertMessage(message)
+      } else {
+        updateContactSummary(message, true)
+      }
+    })
+  }
+
+  function handleSocketMessage(payload: WsMessage) {
+    if (!payload || typeof payload.messageType !== 'number') return
+    if (payload.messageType === INIT_MESSAGE) {
+      mergeInitData((payload.extendData || {}) as WsInitData)
+      return
+    }
+
+    const message = normalizeMessage(payload, payload.sendUserId === userStore.userInfo?.userId ? 'sent' : 'received')
+    upsertMessage(message)
+  }
+
+  function attachSocket() {
+    if (removeSocketListener) return
+    removeSocketListener = userStore.addSocketListener(handleSocketMessage)
+    userStore.connectSocket()
+  }
+
+  function detachSocket() {
+    removeSocketListener?.()
+    removeSocketListener = null
+  }
+
+  function retryMessage(message: ChatMessage) {
+    if (message.messageType === TEXT_MESSAGE) {
+      return sendMessage(message.messageContent)
+    }
+    ElMessage.warning('媒体消息请重新选择文件后发送')
+    return Promise.resolve(null)
   }
 
   return {
     contacts,
     currentContact,
     messages,
-    myGroups,
+    loadingContacts,
+    loadingMessages,
+    sending,
+    pendingApplyCount,
+    keyword,
+    activeFilter,
+    filteredContacts,
     unreadTotal,
+    avatarSeed,
     loadContacts,
-    loadMyGroups,
-    searchContacts,
     loadMessages,
-    sendMessage,
-    sendMediaMessage,
-    sendFileMessage,
     setCurrentContact,
-    receiveMessage,
-    clearUnreadCount
+    clearCurrentContact,
+    sendMessage,
+    sendFileMessage,
+    retryMessage,
+    attachSocket,
+    detachSocket,
   }
 })

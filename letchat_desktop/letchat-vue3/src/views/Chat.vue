@@ -1,547 +1,759 @@
 <template>
-  <div class="chat-container">
-    <!-- 侧边栏 -->
-    <div class="sidebar">
-      <!-- 用户信息 -->
-      <div class="user-info">
-        <el-avatar :src="userStore.userInfo?.avatar || defaultAvatar" :size="40" @click="userProfileVisible = true" style="cursor: pointer" />
-        <span class="username" @click="userProfileVisible = true" style="cursor: pointer">{{ userStore.userInfo?.nickName || '用户' }}</span>
-        <div class="user-actions">
-          <el-button type="text" @click="userSearchVisible = true" title="搜索用户">
-            <el-icon><Search /></el-icon>
-          </el-button>
-          <el-button type="text" @click="friendApplyVisible = true" title="好友申请">
-            <el-icon><User /></el-icon>
-          </el-button>
-          <el-button type="text" @click="handleLogout" title="退出登录">
-            <el-icon><SwitchButton /></el-icon>
-          </el-button>
+  <main class="chat-shell">
+    <aside class="sidebar">
+      <header class="profile">
+        <button class="identity" type="button" @click="profileVisible = true">
+          <div class="lc-avatar identity-avatar">{{ userSeed }}</div>
+          <div class="identity-text">
+            <strong>{{ userStore.displayName }}</strong>
+            <span>{{ userStore.userInfo?.userId || '未登录' }}</span>
+          </div>
+        </button>
+
+        <div class="profile-actions">
+          <el-tooltip content="添加联系人" placement="bottom">
+            <button class="lc-icon-button" type="button" @click="searchVisible = true">
+              <Search />
+            </button>
+          </el-tooltip>
+          <el-tooltip content="好友申请" placement="bottom">
+            <button class="lc-icon-button badge-wrap" type="button" @click="applyVisible = true">
+              <Bell />
+              <span v-if="chatStore.pendingApplyCount" class="badge">{{ chatStore.pendingApplyCount }}</span>
+            </button>
+          </el-tooltip>
+          <el-tooltip content="退出登录" placement="bottom">
+            <button class="lc-icon-button" type="button" @click="logout">
+              <SwitchButton />
+            </button>
+          </el-tooltip>
         </div>
+      </header>
+
+      <div class="search-area">
+        <el-input v-model="chatStore.keyword" placeholder="搜索联系人或群聊" clearable :prefix-icon="Search" />
+        <el-segmented v-model="chatStore.activeFilter" :options="filterOptions" block />
       </div>
 
-      <!-- 搜索框 -->
-      <div class="search-box">
-        <el-input
-          v-model="searchKeyword"
-          placeholder="搜索联系人"
-          prefix-icon="Search"
-          @keyup.enter="handleSearch"
-        />
-      </div>
-
-      <!-- 联系人列表 -->
       <ContactList
-        :contacts="filteredContacts"
-        :selected-contact="currentContact"
+        :contacts="chatStore.filteredContacts"
+        :selected-contact="chatStore.currentContact"
         @select-contact="selectContact"
       />
-    </div>
+    </aside>
 
-    <!-- 聊天区域 -->
-    <div class="chat-area" v-if="currentContact">
-      <!-- 聊天头部 -->
-      <div class="chat-header">
-        <div class="contact-title">
-          <el-avatar :src="currentContact.avatar || defaultAvatar" :size="32" />
-          <span>{{ currentContact.contactName }}</span>
-        </div>
-        <div class="chat-actions">
-          <el-button type="text" @click="showContactInfo">
-            <el-icon><InfoFilled /></el-icon>
-          </el-button>
-        </div>
-      </div>
+    <section class="conversation">
+      <template v-if="chatStore.currentContact">
+        <header class="chat-header">
+          <div class="chat-title">
+            <div class="lc-avatar title-avatar" :class="{ group: chatStore.currentContact.contactType === 'G' }">
+              {{ chatStore.currentContact.contactName.slice(0, 2).toUpperCase() }}
+            </div>
+            <div class="title-main">
+              <h1>{{ chatStore.currentContact.contactName }}</h1>
+              <p>{{ chatStore.currentContact.contactType === 'G' ? '群聊' : '好友' }} · {{ connectionText }}</p>
+            </div>
+          </div>
 
-      <!-- 消息列表 -->
-      <div class="message-list" ref="messageListRef">
-        <MessageBubble
-          v-for="message in messages"
-          :key="message.messageId"
-          :message="message"
-          @retry-message="handleRetryMessage"
-        />
-      </div>
+          <div class="header-actions">
+            <span class="status-pill" :class="{ online: userStore.isOnline }">
+              <i></i>
+              {{ userStore.isOnline ? '实时连接' : '正在重连' }}
+            </span>
+            <el-tooltip content="聊天详情" placement="bottom">
+              <button class="lc-icon-button" type="button" @click="contactInfoVisible = true">
+                <InfoFilled />
+              </button>
+            </el-tooltip>
+          </div>
+        </header>
 
-      <!-- 消息输入区 -->
-      <div class="message-input">
-        <div class="input-toolbar">
-          <el-upload
-            class="upload-btn"
-            :action="messageUploadUrl"
-            :show-file-list="false"
-            :before-upload="beforeUpload"
-            :headers="uploadHeaders"
-            accept="image/*,video/*"
-          >
-            <el-button type="text">
-              <el-icon><Picture /></el-icon>
-            </el-button>
-          </el-upload>
-        </div>
-        <div class="input-area">
-          <el-input
-            v-model="messageText"
-            type="textarea"
-            :rows="2"
-            placeholder="请输入消息..."
-            @keydown.enter="handleEnterKey"
-            :disabled="!currentContact"
+        <div ref="messageListRef" class="message-list" v-loading="chatStore.loadingMessages">
+          <MessageBubble
+            v-for="message in chatStore.messages"
+            :key="message.localId || message.messageId"
+            :message="message"
+            @retry-message="chatStore.retryMessage"
           />
-          <el-button 
-            type="primary" 
-            @click="handleSendMessage"
-            :disabled="!messageText.trim() || !currentContact"
-          >
-            发送
-          </el-button>
+
+          <div v-if="!chatStore.loadingMessages && chatStore.messages.length === 0" class="empty-chat">
+            <div class="empty-chip">
+              <ChatLineRound />
+            </div>
+            <strong>还没有消息</strong>
+            <span>第一条消息会从这里开始，发送状态会同步显示。</span>
+          </div>
+        </div>
+
+        <footer class="composer">
+          <div class="composer-tools">
+            <el-tooltip content="发送媒体文件" placement="top">
+              <button class="lc-icon-button" type="button" @click="fileInputRef?.click()">
+                <Paperclip />
+              </button>
+            </el-tooltip>
+            <input ref="fileInputRef" class="file-input" type="file" accept="image/*,video/*" @change="sendFile" />
+            <span class="hint">Enter 发送，Shift + Enter 换行</span>
+          </div>
+
+          <div class="composer-row">
+            <el-input
+              v-model="messageText"
+              type="textarea"
+              resize="none"
+              :autosize="{ minRows: 1, maxRows: 5 }"
+              placeholder="输入消息..."
+              @keydown.enter="handleEnter"
+            />
+            <el-button type="primary" :disabled="!messageText.trim()" :loading="chatStore.sending" @click="sendText">
+              <Promotion />
+              发送
+            </el-button>
+          </div>
+        </footer>
+      </template>
+
+      <div v-else class="welcome">
+        <div class="welcome-inner">
+          <div class="welcome-kicker">
+            <span :class="{ online: userStore.isOnline }"></span>
+            {{ connectionText }}
+          </div>
+          <h1>选择左侧会话</h1>
+          <p>消息、好友申请和离线记录会随连接自动同步。</p>
+          <div class="welcome-actions">
+            <el-button type="primary" @click="searchVisible = true">
+              <Search />
+              添加联系人
+            </el-button>
+            <el-button @click="applyVisible = true">
+              <Bell />
+              查看申请
+            </el-button>
+          </div>
+        </div>
+
+        <div class="welcome-rail" aria-hidden="true">
+          <div class="rail-line"></div>
+          <div class="rail-item active">
+            <span></span>
+            <strong>WebSocket</strong>
+            <em>online</em>
+          </div>
+          <div class="rail-item">
+            <span></span>
+            <strong>RabbitMQ</strong>
+            <em>ready</em>
+          </div>
+          <div class="rail-item">
+            <span></span>
+            <strong>Offline Sync</strong>
+            <em>idle</em>
+          </div>
         </div>
       </div>
-    </div>
+    </section>
 
-    <!-- 空状态 -->
-    <div class="empty-state" v-else>
-      <el-empty description="选择一个联系人开始聊天" />
-    </div>
-
-    <!-- 联系人详情对话框 -->
-    <ContactInfoDialog 
-      v-model="contactInfoVisible" 
-      :contact="currentContact"
-    />
-
-    <!-- 搜索用户对话框 -->
-    <UserSearchDialog 
-      v-model="userSearchVisible"
-      @friend-added="handleFriendAdded"
-    />
-
-    <!-- 好友申请列表对话框 -->
-    <FriendApplyList 
-      v-model="friendApplyVisible"
-      @apply-processed="handleApplyProcessed"
-    />
-
-    <!-- 个人资料 -->
-    <UserProfileDialog
-      v-model="userProfileVisible"
-      @profile-updated="handleProfileUpdated"
-    />
-  </div>
+    <UserSearchDialog v-model="searchVisible" @friend-added="reloadContacts" />
+    <FriendApplyList v-model="applyVisible" @apply-processed="reloadContacts" />
+    <ContactInfoDialog v-model="contactInfoVisible" :contact="chatStore.currentContact" @changed="afterContactChanged" />
+    <UserProfileDialog v-model="profileVisible" @profile-updated="userStore.refreshUserInfo" />
+  </main>
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, nextTick, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Search, User, SwitchButton, InfoFilled, Picture } from '@element-plus/icons-vue'
-import { useUserStore } from '@/stores/user'
-import { useChatStore } from '@/stores/chat'
-import type { Contact } from '@/types/api'
-import { useUploadHeaders, getUploadUrl } from '@/utils/uploadConfig'
+import {
+  Bell,
+  ChatLineRound,
+  InfoFilled,
+  Paperclip,
+  Promotion,
+  Search,
+  SwitchButton,
+} from '@element-plus/icons-vue'
 import ContactInfoDialog from '@/components/ContactInfoDialog.vue'
 import ContactList from '@/components/ContactList.vue'
-import MessageBubble from '@/components/MessageBubble.vue'
-import UserSearchDialog from '@/components/UserSearchDialog.vue'
 import FriendApplyList from '@/components/FriendApplyList.vue'
+import MessageBubble from '@/components/MessageBubble.vue'
 import UserProfileDialog from '@/components/UserProfileDialog.vue'
+import UserSearchDialog from '@/components/UserSearchDialog.vue'
+import { useChatStore } from '@/stores/chat'
+import { useUserStore } from '@/stores/user'
+import type { ContactInfo } from '@/types/api'
 
 const router = useRouter()
 const userStore = useUserStore()
 const chatStore = useChatStore()
 
-const searchKeyword = ref('')
 const messageText = ref('')
-const messageListRef = ref<HTMLElement>()
+const searchVisible = ref(false)
+const applyVisible = ref(false)
 const contactInfoVisible = ref(false)
-const userSearchVisible = ref(false)
-const friendApplyVisible = ref(false)
-const userProfileVisible = ref(false)
+const profileVisible = ref(false)
+const messageListRef = ref<HTMLElement | null>(null)
+const fileInputRef = ref<HTMLInputElement | null>(null)
 
-const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
+const filterOptions = [
+  { label: '全部', value: 'all' },
+  { label: '好友', value: 'U' },
+  { label: '群聊', value: 'G' },
+]
 
-// 获取上传配置
-const uploadHeaders = useUploadHeaders()
-const messageUploadUrl = getUploadUrl('/chat/uploadFile')
-
-// 计算属性
-const currentContact = computed(() => chatStore.currentContact)
-const messages = computed(() => chatStore.messages)
-const filteredContacts = computed(() => {
-  if (!searchKeyword.value) return chatStore.contacts
-  return chatStore.contacts.filter(contact => 
-    contact.contactName.toLowerCase().includes(searchKeyword.value.toLowerCase())
-  )
+const userSeed = computed(() => userStore.displayName.slice(0, 2).toUpperCase())
+const connectionText = computed(() => {
+  if (userStore.socketStatus === 'open') return '连接正常'
+  if (userStore.socketStatus === 'connecting') return '连接中'
+  if (userStore.socketStatus === 'error') return '连接异常'
+  return '未连接'
 })
 
-// 生命周期
-onMounted(async () => {
-  if (!userStore.isLoggedIn) {
-    router.push('/login')
+function scrollToBottom() {
+  nextTick(() => {
+    const node = messageListRef.value
+    if (node) node.scrollTop = node.scrollHeight
+  })
+}
+
+async function selectContact(contact: ContactInfo) {
+  await chatStore.setCurrentContact(contact)
+  scrollToBottom()
+}
+
+async function sendText() {
+  const content = messageText.value
+  if (!content.trim()) return
+  messageText.value = ''
+  try {
+    await chatStore.sendMessage(content)
+    scrollToBottom()
+  } catch {
+    ElMessage.error('消息发送失败')
+  }
+}
+
+function handleEnter(event: KeyboardEvent) {
+  if (event.shiftKey) return
+  event.preventDefault()
+  sendText()
+}
+
+async function sendFile(event: Event) {
+  const input = event.target as HTMLInputElement
+  const file = input.files?.[0]
+  if (!file) return
+
+  if (file.size > 50 * 1024 * 1024) {
+    ElMessage.error('文件不能超过 50MB')
+    input.value = ''
     return
   }
-  
-  // 确保获取用户信息
-  if (!userStore.userInfo) {
-    await userStore.getUserInfo()
+
+  try {
+    await chatStore.sendFileMessage(file)
+    scrollToBottom()
+  } catch {
+    ElMessage.error('文件发送失败')
+  } finally {
+    input.value = ''
   }
-  
+}
+
+async function reloadContacts() {
   await chatStore.loadContacts()
-  
-  // 监听WebSocket消息
-  if (userStore.socket) {
-    userStore.socket.onmessage = (event) => {
-      try {
-        const data = JSON.parse(event.data)
-        if (data.type === 2) { // 聊天消息类型
-          chatStore.receiveMessage(data.message)
-        }
-      } catch (error) {
-        console.error('解析WebSocket消息失败:', error)
-      }
-    }
+}
+
+async function afterContactChanged() {
+  chatStore.clearCurrentContact()
+  await reloadContacts()
+}
+
+async function logout() {
+  try {
+    await ElMessageBox.confirm('确定退出当前账号吗？', '退出登录', { type: 'warning' })
+  } catch {
+    return
   }
+  await userStore.logout()
+  router.push('/login')
+}
+
+onMounted(async () => {
+  if (!userStore.userInfo) {
+    await userStore.refreshUserInfo().catch(() => null)
+  }
+  chatStore.attachSocket()
+  await chatStore.loadContacts()
 })
 
-// 方法
-const selectContact = async (contact: Contact) => {
-  await chatStore.setCurrentContact(contact)
-  chatStore.clearUnreadCount(contact.contactId)
-  scrollToBottom()
-}
+onBeforeUnmount(() => {
+  chatStore.detachSocket()
+})
 
-const handleSendMessage = async () => {
-  if (!messageText.value.trim() || !currentContact.value) return
-  
-  try {
-    await chatStore.sendMessage(messageText.value, 2)
-    
-    messageText.value = ''
-    scrollToBottom()
-  } catch (error) {
-    ElMessage.error('发送消息失败')
-  }
-}
-
-const scrollToBottom = () => {
-  nextTick(() => {
-    if (messageListRef.value) {
-      messageListRef.value.scrollTop = messageListRef.value.scrollHeight
-    }
-  })
-}
-
-const handleLogout = () => {
-  ElMessageBox.confirm('确定要退出登录吗？', '提示', {
-    confirmButtonText: '确定',
-    cancelButtonText: '取消',
-    type: 'warning'
-  }).then(() => {
-    userStore.logout()
-    router.push('/login')
-  })
-}
-
-const handleFriendAdded = () => {
-  // 好友添加成功后刷新联系人列表
-  chatStore.loadContacts()
-}
-
-const handleApplyProcessed = () => {
-  // 处理好友申请后的逻辑
-  chatStore.loadContacts()
-}
-
-const handleProfileUpdated = () => {
-  // 个人资料更新后的逻辑
-  // 用户信息已在store中更新，这里可以添加额外逻辑
-}
-
-const handleSearch = () => {
-  // 搜索逻辑已在计算属性中处理
-}
-
-const showContactInfo = () => {
-  contactInfoVisible.value = true
-}
-
-const beforeUpload = (file: File) => {
-  const isImage = file.type.startsWith('image/')
-  const isVideo = file.type.startsWith('video/')
-  
-  if (!isImage && !isVideo) {
-    ElMessage.error('只能上传图片或视频文件！')
-    return false
-  }
-  
-  const maxSize = 50 * 1024 * 1024 // 50MB
-  if (file.size > maxSize) {
-    ElMessage.error('文件大小不能超过50MB！')
-    return false
-  }
-  
-  handleFileUpload(file, 5) // 媒体文件消息
-  return false // 阻止自动上传
-}
-
-const handleFileUpload = async (file: File, messageType: number) => {
-  if (!currentContact.value) return
-  
-  try {
-    await chatStore.sendFileMessage({
-      contactId: currentContact.value.contactId,
-      file,
-      messageType
-    })
-    scrollToBottom()
-  } catch (error) {
-    ElMessage.error('文件上传失败')
-  }
-}
-
-const previewImage = (url: string) => {
-  // 实现图片预览功能
-  ElMessage.info('图片预览功能开发中...')
-}
-
-const handleRetryMessage = async (message: ChatMessage) => {
-  try {
-    if (message.messageType === 2) {
-      // 文本消息重试
-      await chatStore.sendMessage(message.messageContent, 2)
-    } else {
-      // 媒体消息重试（需要用户重新选择文件）
-      ElMessage.warning('媒体消息请重新上传')
-    }
-  } catch (error) {
-    ElMessage.error('重发消息失败')
-  }
-}
-
-const handleEnterKey = (event: KeyboardEvent) => {
-  // 如果按下了Shift键，允许换行
-  if (event.shiftKey) {
-    return // 允许默认行为（换行）
-  }
-  
-  // 否则阻止默认行为并发送消息
-  event.preventDefault()
-  handleSendMessage()
-}
-
-// 监听消息变化，自动滚动到底部
-watch(messages, () => {
-  scrollToBottom()
-}, { deep: true })
+watch(
+  () => chatStore.messages.length,
+  () => scrollToBottom(),
+)
 </script>
 
 <style scoped>
-.chat-container {
-  display: flex;
+.chat-shell {
+  display: grid;
+  grid-template-columns: 340px minmax(0, 1fr);
+  gap: 14px;
   height: 100vh;
-  background: #f5f5f5;
+  padding: 16px;
+}
+
+.sidebar,
+.conversation {
+  min-height: 0;
+  border: 1px solid rgba(255, 255, 255, 0.82);
+  border-radius: 18px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: var(--lc-shadow);
+  backdrop-filter: blur(18px);
 }
 
 .sidebar {
-  width: 300px;
-  background: white;
-  border-right: 1px solid #e4e7ed;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
-.user-info {
-  padding: 15px;
-  border-bottom: 1px solid #e4e7ed;
-  display: flex;
+.profile {
+  padding: 14px;
+  border-bottom: 1px solid var(--lc-line);
+}
+
+.identity {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
   align-items: center;
-  gap: 10px;
-}
-
-.username {
-  flex: 1;
-  font-weight: 500;
-  font-size: 14px;
-}
-
-.user-actions {
-  display: flex;
-  gap: 8px;
-}
-
-.user-actions .el-button {
-  padding: 4px;
-  font-size: 16px;
-}
-
-.search-box {
-  padding: 15px;
-  border-bottom: 1px solid #e4e7ed;
-}
-
-.contact-list {
-  flex: 1;
-  overflow-y: auto;
-}
-
-.contact-item {
-  padding: 15px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
+  gap: 11px;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  color: var(--lc-text);
+  background: transparent;
+  text-align: left;
   cursor: pointer;
-  border-bottom: 1px solid #f0f0f0;
-  transition: background-color 0.2s;
 }
 
-.contact-item:hover {
-  background-color: #f5f5f5;
+.identity-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
 }
 
-.contact-item.active {
-  background-color: #e6f7ff;
-}
-
-.contact-info {
-  flex: 1;
+.identity-text {
   min-width: 0;
 }
 
-.contact-name {
-  font-weight: 500;
-  margin-bottom: 4px;
-}
-
-.last-message {
-  font-size: 12px;
-  color: #666;
-  white-space: nowrap;
+.identity strong,
+.identity span {
+  display: block;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.contact-meta {
-  text-align: right;
-  font-size: 12px;
+.identity strong {
+  font-size: 15px;
+  font-weight: 850;
 }
 
-.unread-count {
-  background: #ff4d4f;
-  color: white;
-  border-radius: 10px;
-  padding: 2px 6px;
+.identity span {
+  margin-top: 2px;
+  color: var(--lc-muted);
   font-size: 11px;
-  margin-bottom: 4px;
 }
 
-.last-time {
-  color: #999;
+.profile-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 13px;
 }
 
-.chat-area {
-  flex: 1;
+.badge-wrap {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  min-width: 17px;
+  height: 17px;
+  padding: 0 5px;
+  border-radius: 999px;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 17px;
+  background: var(--lc-danger);
+}
+
+.search-area {
+  display: grid;
+  gap: 10px;
+  padding: 12px 14px 8px;
+}
+
+.conversation {
+  position: relative;
   display: flex;
   flex-direction: column;
-  background: white;
+  overflow: hidden;
 }
 
 .chat-header {
-  padding: 15px 20px;
-  border-bottom: 1px solid #e4e7ed;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--lc-line);
+  background: rgba(255, 255, 255, 0.56);
 }
 
-.contact-title {
+.chat-title {
   display: flex;
   align-items: center;
-  gap: 10px;
-  font-weight: 500;
+  gap: 11px;
+  min-width: 0;
+}
+
+.title-avatar {
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+}
+
+.title-avatar.group {
+  background: linear-gradient(145deg, #33444d, #0d7c69);
+}
+
+.title-main {
+  min-width: 0;
+}
+
+.chat-title h1,
+.chat-title p {
+  margin: 0;
+}
+
+.chat-title h1 {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 17px;
+  font-weight: 850;
+}
+
+.chat-title p {
+  margin-top: 2px;
+  color: var(--lc-muted);
+  font-size: 12px;
+}
+
+.header-actions {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 6px 9px;
+  border: 1px solid var(--lc-line);
+  border-radius: 999px;
+  color: var(--lc-muted);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.74);
+}
+
+.status-pill i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lc-amber);
+}
+
+.status-pill.online i {
+  background: var(--lc-accent);
+  box-shadow: 0 0 0 4px rgba(13, 124, 105, 0.12);
 }
 
 .message-list {
   flex: 1;
-  padding: 20px;
+  min-height: 0;
   overflow-y: auto;
+  padding: 18px 20px;
+  background:
+    linear-gradient(rgba(248, 250, 248, 0.78), rgba(248, 250, 248, 0.78)),
+    linear-gradient(90deg, rgba(13, 124, 105, 0.035) 1px, transparent 1px),
+    linear-gradient(rgba(13, 124, 105, 0.028) 1px, transparent 1px);
+  background-size: auto, 28px 28px, 28px 28px;
 }
 
-.message-item {
-  display: flex;
-  margin-bottom: 15px;
-  gap: 10px;
+.empty-chat {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  min-height: 100%;
+  color: var(--lc-muted);
+  text-align: center;
 }
 
-.message-item.own {
-  flex-direction: row-reverse;
+.empty-chip {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid var(--lc-line);
+  border-radius: 13px;
+  color: var(--lc-accent);
+  background: rgba(255, 255, 255, 0.78);
 }
 
-.message-content {
-  max-width: 70%;
+.empty-chip :deep(svg) {
+  width: 20px;
+  height: 20px;
 }
 
-.message-bubble {
-  padding: 10px 15px;
-  border-radius: 10px;
-  word-break: break-word;
+.empty-chat strong {
+  color: var(--lc-text);
+  font-size: 15px;
+  font-weight: 850;
 }
 
-.message-item.other .message-bubble {
-  background: #f0f0f0;
-}
-
-.message-item.own .message-bubble {
-  background: #1890ff;
-  color: white;
-}
-
-.message-time {
+.empty-chat span {
+  max-width: 280px;
   font-size: 12px;
-  color: #999;
-  margin-top: 5px;
-  text-align: right;
 }
 
-.message-image {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
-  cursor: pointer;
+.composer {
+  padding: 12px 14px 14px;
+  border-top: 1px solid var(--lc-line);
+  background: rgba(255, 255, 255, 0.8);
 }
 
-.message-video {
-  max-width: 300px;
-  max-height: 200px;
-  border-radius: 8px;
-}
-
-.message-input {
-  padding: 15px;
-  border-top: 1px solid #e4e7ed;
-}
-
-.input-toolbar {
-  margin-bottom: 10px;
-}
-
-.upload-btn {
-  display: inline-block;
-}
-
-.input-area {
-  display: flex;
-  gap: 10px;
-  align-items: flex-end;
-}
-
-.input-area .el-textarea {
-  flex: 1;
-}
-
-.empty-state {
-  flex: 1;
+.composer-tools {
   display: flex;
   align-items: center;
+  gap: 9px;
+  margin-bottom: 9px;
+}
+
+.hint {
+  color: var(--lc-soft);
+  font-size: 12px;
+}
+
+.file-input {
+  display: none;
+}
+
+.composer-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 10px;
+}
+
+.composer-row .el-button {
+  height: 38px;
+  border-radius: 10px;
+}
+
+.composer-row .el-button :deep(svg) {
+  width: 15px;
+  height: 15px;
+}
+
+.welcome {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 440px) 260px;
+  align-items: center;
   justify-content: center;
-  background: white;
+  gap: 64px;
+  flex: 1;
+  padding: 52px;
+  overflow: hidden;
+  background:
+    linear-gradient(110deg, rgba(255, 255, 255, 0.84), rgba(255, 255, 255, 0.62)),
+    radial-gradient(circle at 78% 26%, rgba(13, 124, 105, 0.13), transparent 28%);
+}
+
+.welcome-inner {
+  position: relative;
+  z-index: 1;
+}
+
+.welcome-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 10px;
+  border: 1px solid var(--lc-line);
+  border-radius: 999px;
+  color: var(--lc-muted);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.welcome-kicker span {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lc-amber);
+}
+
+.welcome-kicker span.online {
+  background: var(--lc-accent);
+}
+
+.welcome h1,
+.welcome p {
+  margin: 0;
+}
+
+.welcome h1 {
+  margin-top: 18px;
+  color: var(--lc-text);
+  font-size: clamp(36px, 5vw, 66px);
+  line-height: 1.02;
+  font-weight: 950;
+  letter-spacing: 0;
+}
+
+.welcome p {
+  max-width: 380px;
+  margin-top: 14px;
+  color: var(--lc-muted);
+}
+
+.welcome-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.welcome-actions .el-button {
+  border-radius: 10px;
+}
+
+.welcome-actions .el-button :deep(svg) {
+  width: 15px;
+  height: 15px;
+}
+
+.welcome-rail {
+  position: relative;
+  display: grid;
+  gap: 14px;
+  padding-left: 28px;
+}
+
+.rail-line {
+  position: absolute;
+  top: 20px;
+  bottom: 20px;
+  left: 8px;
+  width: 1px;
+  background: var(--lc-line-strong);
+}
+
+.rail-item {
+  position: relative;
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border: 1px solid var(--lc-line);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.78);
+}
+
+.rail-item span {
+  position: absolute;
+  top: 18px;
+  left: -25px;
+  width: 10px;
+  height: 10px;
+  border: 2px solid #ffffff;
+  border-radius: 50%;
+  background: var(--lc-soft);
+  box-shadow: 0 0 0 1px var(--lc-line-strong);
+}
+
+.rail-item.active span {
+  background: var(--lc-accent);
+}
+
+.rail-item strong {
+  font-size: 13px;
+  font-weight: 850;
+}
+
+.rail-item em {
+  color: var(--lc-soft);
+  font-size: 11px;
+  font-style: normal;
+}
+
+@media (max-width: 960px) {
+  .chat-shell {
+    grid-template-columns: 1fr;
+    height: auto;
+    min-height: 100vh;
+  }
+
+  .sidebar {
+    min-height: 420px;
+  }
+
+  .conversation {
+    min-height: 660px;
+  }
+
+  .welcome {
+    grid-template-columns: 1fr;
+  }
+
+  .welcome-rail {
+    display: none;
+  }
+}
+
+@media (max-width: 640px) {
+  .chat-shell {
+    padding: 10px;
+  }
+
+  .chat-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .header-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .composer-row {
+    grid-template-columns: 1fr;
+  }
+
+  .composer-row .el-button {
+    width: 100%;
+  }
 }
 </style>

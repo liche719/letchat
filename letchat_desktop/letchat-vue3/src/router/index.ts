@@ -19,16 +19,10 @@ const router = createRouter({
       path: '/register',
       name: 'register',
       component: () => import('../views/Register.vue')
-    },
-    {
-      path: '/test',
-      name: 'test',
-      component: () => import('../views/Test.vue')
     }
   ]
 })
 
-// 路由守卫
 router.beforeEach((to, from, next) => {
   const userStore = useUserStore()
   

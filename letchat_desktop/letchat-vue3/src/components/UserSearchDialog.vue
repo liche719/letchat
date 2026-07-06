@@ -1,279 +1,222 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    title="搜索用户"
-    width="500px"
-    :close-on-click-modal="false"
-    @close="handleClose"
-  >
-    <div class="search-container">
-      <div class="search-input-group">
+  <el-dialog v-model="visible" title="添加联系人" width="520px" destroy-on-close class="contact-search-dialog">
+    <div class="search-panel">
+      <div class="search-line">
         <el-input
-          v-model="searchKeyword"
-          placeholder="请输入用户ID或邮箱"
-          prefix-icon="Search"
-          @keyup.enter="handleSearch"
+          v-model="keyword"
+          size="large"
+          placeholder="输入用户 ID、群 ID 或邮箱"
           clearable
+          :prefix-icon="Search"
+          @keyup.enter="search"
         />
-        <el-button type="primary" @click="handleSearch" :loading="loading">
-          搜索
+        <el-button type="primary" size="large" :loading="loading" @click="search">搜索</el-button>
+      </div>
+
+      <div v-if="result" class="result-row">
+        <div class="lc-avatar result-avatar">{{ resultName.slice(0, 2).toUpperCase() }}</div>
+        <div class="result-main">
+          <strong>{{ resultName }}</strong>
+          <span>{{ result.contactId }}</span>
+          <small>{{ result.areaName || '未设置地区' }} · {{ result.statusName || statusLabel }}</small>
+        </div>
+        <el-button type="primary" plain :disabled="result.status === 1" @click="openApply">
+          {{ result.status === 1 ? '已添加' : '申请' }}
         </el-button>
       </div>
-      
 
-      
-      <div class="search-results" v-if="searchResults.length > 0">
-        <div
-          v-for="user in searchResults"
-          :key="user.contactId"
-          class="user-item"
-        >
-          <el-avatar :src="user.avatar || defaultAvatar" :size="40" />
-          <div class="user-info">
-            <div class="user-name">{{ user.nickName || user.contactName }}</div>
-            <div class="user-id">ID: {{ user.contactId }}</div>
-            <div class="user-area" v-if="user.areaName">{{ user.areaName }}</div>
-            <div class="user-status">状态: {{ user.status }} ({{ user.statusName }})</div>
-          </div>
-          <el-button
-            type="primary"
-            size="small"
-            :disabled="user.status === 1"
-            @click="handleAddFriend(user)"
-          >
-            {{ user.status === 1 ? '已是好友' : '添加好友' }}
-          </el-button>
-        </div>
+      <div v-else-if="searched" class="empty-state compact">
+        <div class="mini-icon"><Search /></div>
+        <strong>没有找到联系人</strong>
+        <span>请检查 ID 是否完整，群聊通常以 G 开头，用户通常以 U 开头。</span>
       </div>
-      
-      <div class="no-results" v-else-if="!loading && searched && searchResults.length === 0">
-        <el-empty description="未找到用户" />
-      </div>
-      
-      <div class="search-status" v-else-if="!searched">
-        <el-empty description="请输入用户ID进行搜索" />
+
+      <div v-else class="empty-state">
+        <div class="mini-icon"><Plus /></div>
+        <strong>搜索用户或群聊</strong>
+        <span>输入完整 ID 后可以发送好友申请或入群申请。</span>
       </div>
     </div>
 
-    <!-- 添加好友对话框 -->
-    <el-dialog
-      v-model="addFriendDialogVisible"
-      title="添加好友"
-      width="400px"
-      :close-on-click-modal="false"
-      append-to-body
-    >
-      <div>
-        <p>向 <strong>{{ selectedUser?.nickName }}</strong> 发送好友申请</p>
-        <el-input
-          v-model="applyMessage"
-          type="textarea"
-          :rows="3"
-          placeholder="请输入验证信息（可选）"
-          maxlength="200"
-          show-word-limit
-        />
-      </div>
+    <el-dialog v-model="applyVisible" title="验证信息" width="420px" append-to-body>
+      <el-input
+        v-model="applyInfo"
+        type="textarea"
+        :rows="4"
+        maxlength="120"
+        show-word-limit
+        placeholder="简单介绍一下你是谁，方便对方通过申请"
+      />
       <template #footer>
-        <el-button @click="addFriendDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="confirmAddFriend" :loading="loading">
-          发送申请
-        </el-button>
+        <el-button @click="applyVisible = false">取消</el-button>
+        <el-button type="primary" :loading="loading" @click="submitApply">发送</el-button>
       </template>
     </el-dialog>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
+import { Plus, Search } from '@element-plus/icons-vue'
 import { contactApi } from '@/api/contact'
 import type { SearchResult } from '@/types/api'
 
-const props = defineProps<{
-  modelValue: boolean
-}>()
-
+const props = defineProps<{ modelValue: boolean }>()
 const emit = defineEmits<{
   'update:modelValue': [value: boolean]
-  'friend-added': [user: SearchResult]
+  'friend-added': []
 }>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+  set: (value) => emit('update:modelValue', value),
 })
 
-const searchKeyword = ref('')
-const searchResults = ref<SearchResult[]>([])
-const selectedUser = ref<SearchResult | null>(null)
-const applyMessage = ref('')
-const addFriendDialogVisible = ref(false)
-const loading = ref(false)
+const keyword = ref('')
+const result = ref<SearchResult | null>(null)
 const searched = ref(false)
+const loading = ref(false)
+const applyVisible = ref(false)
+const applyInfo = ref('你好，我想添加你为联系人。')
 
-const defaultAvatar = '/default-avatar.png'
+const resultName = computed(() => result.value?.nickName || result.value?.contactName || result.value?.contactId || '')
+const statusLabel = computed(() => (result.value?.status === 1 ? '已是联系人' : '可申请'))
 
-const handleSearch = async () => {
-  if (!searchKeyword.value.trim()) {
-    ElMessage.warning('请输入搜索关键词')
+async function search() {
+  if (!keyword.value.trim()) {
+    ElMessage.warning('请输入搜索内容')
     return
   }
-
+  loading.value = true
   try {
-      loading.value = true
-      const response = await contactApi.searchContact(searchKeyword.value.trim())
-      
-      // 检查数据结构
-      let userData = null
-      if (response.data && response.data.data) {
-        userData = response.data.data
-      } else if (response.data && response.data.contactId) {
-        userData = response.data
-      }
-      
-      if (userData) {
-        searchResults.value = [userData]
-      } else {
-        searchResults.value = []
-      }
-      searched.value = true
-    } catch (error) {
-      ElMessage.error('搜索失败')
-      searchResults.value = []
-    } finally {
-      loading.value = false
-    }
-}
-
-const handleAddFriend = (user: SearchResult) => {
-  selectedUser.value = user
-  applyMessage.value = ''
-  addFriendDialogVisible.value = true
-}
-
-const confirmAddFriend = async () => {
-    if (!selectedUser.value) return
-
-    try {
-      loading.value = true
-      const response = await contactApi.applyAddContact(
-        selectedUser.value.contactId,
-        applyMessage.value
-      )
-      
-      // 兼容不同的响应格式
-      const responseData = response.data
-      if (responseData.status === 'success' || responseData.code === 200) {
-        ElMessage.success('好友申请已发送')
-        addFriendDialogVisible.value = false
-        visible.value = false
-        emit('friend-added', selectedUser.value)
-      } else {
-        // 显示后端返回的具体错误信息
-        ElMessage.warning(responseData.info || responseData.message || '申请已发送或重复申请')
-        // 即使后端返回非success状态，也关闭对话框
-        addFriendDialogVisible.value = false
-        visible.value = false
-      }
-    } catch (error: any) {
-      // 网络错误或其他异常
-      if (error.response?.data?.info) {
-        ElMessage.warning(error.response.data.info)
-      } else {
-        ElMessage.success('好友申请已发送') // 默认认为成功
-      }
-      addFriendDialogVisible.value = false
-      visible.value = false
-    } finally {
-      loading.value = false
-    }
+    const response = await contactApi.searchContact(keyword.value.trim())
+    result.value = response.data || null
+    searched.value = true
+  } finally {
+    loading.value = false
   }
+}
 
-const handleClose = () => {
-  searchKeyword.value = ''
-  searchResults.value = []
-  searched.value = false
+function openApply() {
+  if (!result.value) return
+  applyVisible.value = true
+}
+
+async function submitApply() {
+  if (!result.value) return
+  loading.value = true
+  try {
+    await contactApi.applyAdd(result.value.contactId, applyInfo.value)
+    ElMessage.success('申请已发送')
+    applyVisible.value = false
+    visible.value = false
+    emit('friend-added')
+  } finally {
+    loading.value = false
+  }
 }
 </script>
 
 <style scoped>
-.search-container {
-  padding: 20px;
+.search-panel {
+  display: grid;
+  gap: 16px;
 }
 
-.search-input-group {
-  display: flex;
+.search-line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 72px;
   gap: 10px;
+}
+
+.result-row {
+  display: grid;
+  grid-template-columns: 48px minmax(0, 1fr) auto;
   align-items: center;
+  gap: 13px;
+  padding: 14px;
+  border: 1px solid var(--lc-line);
+  border-radius: 12px;
+  background: var(--lc-surface-subtle);
 }
 
-.search-input-group .el-input {
-  flex: 1;
+.result-avatar {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
 }
 
-.user-list {
-  max-height: 400px;
-  overflow-y: auto;
+.result-main {
+  min-width: 0;
 }
 
-.user-item {
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-  cursor: pointer;
-  transition: background-color 0.2s;
+.result-main strong,
+.result-main span,
+.result-main small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.user-item:hover {
-  background-color: #f5f5f5;
+.result-main strong {
+  font-size: 15px;
+  font-weight: 850;
 }
 
-.user-item:last-child {
-  border-bottom: none;
-}
-
-.user-info {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.user-avatar {
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-}
-
-.user-details {
-  flex: 1;
-}
-
-.user-name {
-  font-weight: bold;
-  margin-bottom: 4px;
-}
-
-.user-id {
-  font-size: 12px;
-  color: #666;
-}
-
-.user-area {
-  font-size: 12px;
-  color: #999;
-}
-
-.user-status-badge {
+.result-main span {
+  margin-top: 3px;
+  color: var(--lc-muted);
   font-size: 12px;
 }
 
-.no-results {
+.result-main small {
+  margin-top: 4px;
+  color: var(--lc-soft);
+}
+
+.empty-state {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  min-height: 148px;
+  padding: 26px 24px;
+  border: 1px dashed var(--lc-line-strong);
+  border-radius: 12px;
+  color: var(--lc-muted);
   text-align: center;
-  padding: 40px 0;
-  color: #999;
+  background: linear-gradient(180deg, rgba(248, 250, 248, 0.82), rgba(255, 255, 255, 0.74));
 }
 
-.dialog-footer {
-  text-align: right;
+.empty-state.compact {
+  min-height: 126px;
+}
+
+.mini-icon {
+  display: grid;
+  place-items: center;
+  width: 38px;
+  height: 38px;
+  border-radius: 11px;
+  color: var(--lc-accent);
+  background: var(--lc-accent-soft);
+}
+
+.mini-icon :deep(svg) {
+  width: 18px;
+  height: 18px;
+}
+
+.empty-state strong {
+  color: var(--lc-text);
+  font-size: 14px;
+  font-weight: 850;
+}
+
+.empty-state span {
+  max-width: 300px;
+  font-size: 12px;
+  line-height: 1.6;
 }
 </style>

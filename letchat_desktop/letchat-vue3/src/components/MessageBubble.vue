@@ -1,255 +1,248 @@
 <template>
-  <!-- 系统消息（居中显示，特殊样式） -->
-  <div v-if="[0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13].includes(message.messageType)" class="system-message-wrapper">
-    <div class="system-message">
-      {{ message.messageContent || getMessageTypeDesc(message.messageType) }}
-    </div>
+  <div v-if="isSystemMessage" class="system-line">
+    <span>{{ systemText }}</span>
   </div>
-  
-  <!-- 普通消息（左右布局） -->
-  <div v-else :class="['message-bubble', isMyMessage ? 'my-message' : 'other-message']">
-    <div class="message-content">
-      <!-- 普通聊天消息 -->
-      <div v-if="message.messageType === 2" class="text-message" v-html="formatMessageContent(message.messageContent)">
-      </div>
-      
-      <!-- 媒体文件消息 -->
-      <div v-else-if="message.messageType === 5" class="image-message">
-        <img v-if="message.fileName && isImage(message.fileName)" :src="message.messageContent" alt="图片" @click="previewImage" />
-        <div v-else class="file-message" @click="downloadFile">
-          <div class="file-info">
-            <el-icon><Document /></el-icon>
-            <div class="file-details">
-              <div class="file-name">{{ message.fileName || '文件' }}</div>
-              <div class="file-size">{{ formatFileSize(message.fileSize || 0) }}</div>
+
+  <article v-else class="message" :class="{ mine: isMine }">
+    <div v-if="!isMine" class="lc-avatar avatar">{{ avatarSeed }}</div>
+
+    <div class="bubble-wrap">
+      <div class="sender" v-if="!isMine">{{ message.senderName }}</div>
+      <div class="bubble">
+        <template v-if="message.messageType === 5">
+          <div class="file-block">
+            <Picture v-if="isImageFile" :size="20" />
+            <Document v-else :size="20" />
+            <div>
+              <strong>{{ message.fileName || message.messageContent || '媒体文件' }}</strong>
+              <span>{{ formatFileSize(message.fileSize) }}</span>
             </div>
           </div>
-        </div>
+        </template>
+        <template v-else>
+          <p>{{ message.messageContent }}</p>
+        </template>
       </div>
-      
-      <!-- 其他消息 -->
-      <div v-else class="text-message" v-html="formatMessageContent(message.messageContent)">
+
+      <div class="meta">
+        <span>{{ formatTime(message.sendTime) }}</span>
+        <template v-if="isMine">
+          <Loading v-if="message.sendStatus === 'sending'" class="status sending" />
+          <Check v-else-if="message.sendStatus === 'sent'" class="status sent" />
+          <button v-else-if="message.sendStatus === 'failed'" type="button" class="retry" @click="$emit('retry-message', message)">
+            <CircleClose :size="14" />
+            重试
+          </button>
+        </template>
       </div>
     </div>
-    
-    <div class="message-meta">
-      <span class="message-time">{{ formatTime(message.sendTime) }}</span>
-      <span v-if="isMyMessage" class="message-status">
-        <el-icon v-if="message.sendStatus === 1" class="sending"><Loading /></el-icon>
-        <el-icon v-else-if="message.sendStatus === 2" class="sent"><Check /></el-icon>
-        <el-icon v-else-if="message.sendStatus === 3" class="failed" @click="retryMessage"><CircleClose /></el-icon>
-      </span>
-    </div>
-  </div>
+  </article>
 </template>
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { ElMessage } from 'element-plus'
+import { Check, CircleClose, Document, Loading, Picture } from '@element-plus/icons-vue'
 import { useUserStore } from '@/stores/user'
 import type { ChatMessage } from '@/types/api'
 
-interface Props {
+const props = defineProps<{
   message: ChatMessage
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits<{
-  retryMessage: [message: ChatMessage]
 }>()
-const userStore = useUserStore()
 
-// 判断消息是否是自己发送的
-const isMyMessage = computed(() => {
-  return props.message.senderId === userStore.userInfo?.userId
+defineEmits<{
+  'retry-message': [message: ChatMessage]
+}>()
+
+const userStore = useUserStore()
+const systemTypes = new Set([1, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13])
+
+const isMine = computed(() => props.message.senderId === userStore.userInfo?.userId)
+const isSystemMessage = computed(() => systemTypes.has(props.message.messageType))
+const avatarSeed = computed(() => props.message.senderName?.slice(0, 2).toUpperCase() || 'LC')
+const isImageFile = computed(() => /\.(png|jpe?g|gif|webp|bmp)$/i.test(props.message.fileName || ''))
+
+const systemText = computed(() => {
+  if (props.message.messageContent) return props.message.messageContent
+  const label: Record<number, string> = {
+    1: '好友申请消息',
+    3: '群聊已创建',
+    4: '收到新的好友申请',
+    6: '文件上传完成',
+    7: '当前账号已在其他设备登录',
+    8: '群聊已解散',
+    9: '有成员加入群聊',
+    10: '昵称已更新',
+    11: '有成员退出群聊',
+    12: '有成员被移出群聊',
+    13: '好友申请消息',
+  }
+  return label[props.message.messageType] || '系统消息'
 })
 
-const formatTime = (timestamp: string | number) => {
-  // 处理毫秒级时间戳
-  const time = typeof timestamp === 'number' ? timestamp : new Date(timestamp).getTime()
-  const date = new Date(time)
-  return date.toLocaleTimeString('zh-CN', { 
-    hour: '2-digit', 
-    minute: '2-digit' 
-  })
+function formatTime(value: number) {
+  return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 }
 
-const formatFileSize = (bytes: number) => {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
-const isImage = (fileName: string) => {
-  const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp']
-  const extension = fileName.toLowerCase().split('.').pop()
-  return extension ? imageExtensions.includes(extension) : false
-}
-
-const getMessageTypeDesc = (messageType: number) => {
-  const messageTypeMap: Record<number, string> = {
-    0: '连接消息',
-    1: '添加好友消息',
-    3: '群创建成功',
-    4: '好友申请',
-    6: '文件上传完成',
-    7: '强制下线',
-    8: '群聊已解散',
-    9: '加入群聊',
-    10: '更新昵称',
-    11: '退出群聊',
-    12: '被管理员移出群聊',
-    13: '添加好友打招呼消息'
+function formatFileSize(bytes?: number) {
+  if (!bytes) return '待上传'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let size = bytes
+  let index = 0
+  while (size >= 1024 && index < units.length - 1) {
+    size /= 1024
+    index += 1
   }
-  return messageTypeMap[messageType] || '未知消息类型'
-}
-
-const previewImage = () => {
-  // 实现图片预览功能
-  ElMessage.info('图片预览功能开发中...')
-}
-
-const downloadFile = () => {
-  // 实现文件下载功能
-  ElMessage.info('文件下载功能开发中...')
-}
-
-const retryMessage = () => {
-  if (props.message.sendStatus === 3) {
-    // 触发重试事件
-    emit('retry-message', props.message)
-  }
-}
-
-const formatMessageContent = (content: string) => {
-  if (!content) return ''
-  // 只允许<br>标签，其他HTML标签转义
-  return content
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#x27;')
-    .replace(/&lt;br&gt;/gi, '<br/>')
-    .replace(/&lt;br\/&gt;/gi, '<br/>')
-    .replace(/&lt;br \/&gt;/gi, '<br/>')
+  return `${size.toFixed(index === 0 ? 0 : 1)} ${units[index]}`
 }
 </script>
 
 <style scoped>
-.message-bubble {
-  margin-bottom: 16px;
-  max-width: 70%;
+.system-line {
+  display: flex;
+  justify-content: center;
+  margin: 14px 0;
 }
 
-.my-message {
-  margin-left: auto;
-  text-align: right;
-}
-
-.other-message {
-  margin-right: auto;
-  text-align: left;
-}
-
-.message-content {
-  padding: 12px 16px;
-  border-radius: 12px;
-  display: inline-block;
-  max-width: 100%;
-}
-
-.my-message .message-content {
-  background-color: #409eff;
-  color: white;
-}
-
-.other-message .message-content {
-  background-color: #f0f2f5;
-  color: #333;
-}
-
-.text-message {
-  word-break: break-word;
-  white-space: pre-wrap;
-}
-
-.system-message-wrapper {
-  text-align: center;
-  margin: 16px 0;
-}
-
-.system-message {
-  display: inline-block;
-  font-size: 12px;
-  color: #909399;
-  background-color: #f4f4f5;
-  border-radius: 16px;
+.system-line span {
+  max-width: min(680px, 86%);
   padding: 6px 12px;
-  max-width: 80%;
+  border: 1px solid var(--lc-line);
+  border-radius: 999px;
+  color: var(--lc-muted);
+  font-size: 12px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.message {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 14px 0;
+  animation: message-in 0.22s ease both;
+}
+
+.message.mine {
+  justify-content: flex-end;
+}
+
+.avatar {
+  width: 34px;
+  height: 34px;
+  border-radius: 12px;
+  font-size: 12px;
+}
+
+.bubble-wrap {
+  max-width: min(68%, 680px);
+}
+
+.sender {
+  margin: 0 0 4px 4px;
+  color: var(--lc-muted);
+  font-size: 12px;
+}
+
+.bubble {
+  padding: 10px 13px;
+  border: 1px solid var(--lc-line);
+  border-radius: 15px 15px 15px 5px;
+  color: var(--lc-text);
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(21, 36, 31, 0.08);
+}
+
+.mine .bubble {
+  border-color: rgba(15, 143, 118, 0.35);
+  border-radius: 15px 15px 5px 15px;
+  color: #ffffff;
+  background: linear-gradient(145deg, #0f8f76, #0b6c5a);
+}
+
+.bubble p {
+  margin: 0;
+  white-space: pre-wrap;
   word-break: break-word;
 }
 
-.image-message img {
-  max-width: 200px;
-  max-height: 200px;
-  border-radius: 8px;
-  cursor: pointer;
-}
-
-.file-message {
-  cursor: pointer;
-}
-
-.file-info {
+.file-block {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 10px;
+  min-width: 220px;
 }
 
-.file-details {
-  flex: 1;
+.file-block strong,
+.file-block span {
+  display: block;
 }
 
-.file-name {
-  font-weight: 500;
-  margin-bottom: 4px;
+.file-block strong {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
 }
 
-.file-size {
+.file-block span {
+  margin-top: 3px;
+  opacity: 0.74;
   font-size: 12px;
-  opacity: 0.7;
 }
 
-.message-meta {
-  margin-top: 4px;
-  font-size: 12px;
-  color: #999;
+.meta {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 5px;
+  color: var(--lc-soft);
+  font-size: 11px;
 }
 
-.my-message .message-meta {
-  text-align: right;
-}
-
-.other-message .message-meta {
-  text-align: left;
-}
-
-.message-status {
-  margin-left: 8px;
+.status {
+  width: 14px;
+  height: 14px;
 }
 
 .sending {
-  color: #909399;
+  animation: spin 0.9s linear infinite;
 }
 
 .sent {
-  color: #67c23a;
+  color: var(--lc-accent);
 }
 
-.failed {
-  color: #f56c6c;
+.retry {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 0;
+  color: var(--lc-danger);
+  background: transparent;
+  cursor: pointer;
+}
+
+@keyframes message-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (max-width: 720px) {
+  .bubble-wrap {
+    max-width: 82%;
+  }
 }
 </style>

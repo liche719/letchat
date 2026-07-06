@@ -1,123 +1,166 @@
-// API响应类型定义
-export interface ApiResponse<T = any> {
+export interface ApiResponse<T = unknown> {
   status: 'success' | 'error'
   code: number
   info: string
   data: T
 }
 
-// 用户信息类型
+export interface PaginationResult<T> {
+  totalCount: number
+  pageSize: number
+  pageNo: number
+  pageTotal: number
+  list: T[]
+}
+
+export interface CheckCode {
+  checkCode: string
+  checkCodeKey: string
+}
+
 export interface UserInfo {
   userId: string
-  email: string
+  email?: string
   nickName: string
-  joinType: number
-  sex: number
-  password: string
-  personalSignature: string
-  status: number
-  createTime: string
-  lastLoginTime: string
-  areaName: string
-  areaCode: string
-  lastOffTime: number
-  onlineType: number
+  sex?: number
+  joinType?: number
+  personalSignature?: string
+  areaCode?: string
+  areaName?: string
+  token?: string
+  admin?: boolean
+  contactStatus?: number
+  avatar?: string
+  status?: number
+  createTime?: string
+  lastLoginTime?: string
+  lastOffTime?: number
+  onlineType?: number
 }
 
-// 登录响应
-export interface LoginResponse {
-  token: string
-  userInfo: UserInfo
-}
+export type ContactKind = 'U' | 'G'
 
-// 联系人信息
 export interface ContactInfo {
+  userId?: string
   contactId: string
   contactName: string
-  contactType: 'U' | 'G' // U:用户 G:群组
-  avatar: string
+  contactType: ContactKind
+  contactTypeCode: number
+  status?: number
+  sex?: number
+  createTime?: string
+  lastUpdateTime?: string
   lastMessage?: string
-  lastMessageTime?: string
+  lastReceiveTime?: number | string
   unreadCount?: number
+  memberCount?: number
+  avatar?: string
 }
 
-// 群组信息
+export interface BackendContact {
+  userId?: string
+  contactId: string
+  contactName?: string
+  contactType: number | string
+  status?: number
+  sex?: number
+  createTime?: string
+  lastUpdateTime?: string
+  lastMessage?: string
+  lastReceiveTime?: number | string
+  memberCount?: number
+}
+
 export interface GroupInfo {
   groupId: string
   groupName: string
-  groupNotice: string
-  joinType: number
-  memberCount: number
-  avatar: string
-  createTime: string
-}
-
-// 消息类型
-export interface ChatMessage {
-  messageId: string
-  contactId: string
-  senderId: string
-  senderName: string
-  senderAvatar: string
-  messageContent: string
-  messageType: number
-  sendTime: string
-  fileName?: string
-  fileSize?: number
-  fileType?: number
-  fileUrl?: string
-  coverUrl?: string
-}
-
-// 好友申请
-export interface FriendApply {
-  applyId: number
-  applicantId?: string
-  applyUserId?: string
-  applicantName?: string
-  contactName?: string
-  applicantAvatar?: string
-  applyInfo: string
-  status: number // 0:待处理 1:同意 2:拒绝 3:拉黑
+  groupOwnerId?: string
+  groupOwnerNickName?: string
   createTime?: string
-  lastApplyTime?: string
-  statusName?: string
+  groupNotice?: string
+  joinType?: number
+  status?: number
+  memberCount?: number
 }
 
-// 版本更新信息
-export interface UpdateInfo {
-  id: number
-  version: string
-  updateList: string[]
-  size: number | null
-  fileName: string
-  fileType: string | null
-  outerLink: string
-}
-
-// WebSocket消息类型
-export interface WsMessage {
-  type: number
-  message?: string
-  data?: any
-}
-
-// 搜索联系人结果
 export interface SearchResult {
   contactId: string
-  contactName?: string
+  contactType: ContactKind | 'USER' | 'GROUP' | string
   nickName?: string
-  contactType?: 'USER' | 'GROUP' | 'U' | 'G'
-  avatar?: string
-  status: number
+  contactName?: string
+  status?: number
   statusName?: string
   sex?: number
   areaName?: string
-  isFriend?: boolean
+  avatar?: string
 }
 
-// 系统设置
+export interface FriendApply {
+  applyId: number
+  applyUserId: string
+  receiveUserId?: string
+  contactType?: number
+  contactId: string
+  lastApplyTime?: number
+  status: number
+  applyInfo?: string
+  contactName?: string
+  statusName?: string
+  applicantAvatar?: string
+}
+
+export type MessageSendStatus = 'sending' | 'sent' | 'failed' | 'received'
+
+export interface BackendChatMessage {
+  messageId?: number | string
+  sessionId?: string
+  messageType: number
+  messageContent?: string
+  sendUserId?: string
+  sendUserNickName?: string
+  sendTime?: number
+  contactId?: string
+  contactName?: string
+  contactType?: number
+  fileSize?: number
+  fileName?: string
+  fileType?: number
+  status?: number
+  extendData?: unknown
+  memberCount?: number
+}
+
+export interface ChatMessage {
+  messageId: string
+  localId?: string
+  sessionId?: string
+  contactId: string
+  rawContactId?: string
+  contactName?: string
+  contactType?: number
+  senderId: string
+  senderName: string
+  messageContent: string
+  messageType: number
+  sendTime: number
+  sendStatus: MessageSendStatus
+  status?: number
+  fileSize?: number
+  fileName?: string
+  fileType?: number
+  extendData?: unknown
+}
+
+export interface WsInitData {
+  chatSessionUserList?: BackendContact[]
+  chatMessagesList?: BackendChatMessage[]
+  applyCount?: number
+}
+
+export interface WsMessage extends BackendChatMessage {
+  extendData?: WsInitData | unknown
+}
+
 export interface SysSetting {
-  // 根据实际需求添加系统设置字段
-  [key: string]: any
+  [key: string]: unknown
 }

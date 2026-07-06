@@ -1,44 +1,34 @@
 import request from '@/utils/request'
-import type { ChatMessage, ApiResponse } from '@/types/api'
+import type { ApiResponse, BackendChatMessage, PaginationResult } from '@/types/api'
+
+export interface SendMessageParams {
+  contactId: string
+  messageContent: string
+  messageType: number
+  fileSize?: number
+  fileName?: string
+  fileType?: number
+}
 
 export const chatApi = {
-  // 发送消息
-  sendMessage: (message: Message) => {
-    return request.post<ApiResponse>('/chat/sendMessage', null, {
-      params: message
-    })
+  sendMessage(params: SendMessageParams) {
+    return request.post<unknown, ApiResponse<BackendChatMessage>>('/chat/sendMessage', null, { params })
   },
 
-  // 上传文件
-  uploadFile: (file: File, coverFile: File, messageId: string) => {
+  uploadFile(messageId: string, file: File, coverFile?: File) {
     const formData = new FormData()
     formData.append('messageId', messageId)
     formData.append('file', file)
-    formData.append('coverFile', coverFile)
-    return request.post<ApiResponse>('/uploadFile', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
-    })
-  },
+    formData.append('coverFile', coverFile || file)
 
-  // 加载消息
-  loadMessage: (contactId: string, contactType: number, lastRecieveTime?: string) => {
-    const params: any = { contactId, contactType }
-    if (lastRecieveTime) {
-      params.lastRecieveTime = lastRecieveTime
-    }
-    return request.post<ApiResponse<Message[]>>('/chat/loadMessage', null, {
-      params
-    })
-  },
-
-  // 下载文件
-  downloadFile: (fileId: string, showCover: boolean = false) => {
-    const formData = new FormData()
-    formData.append('fileId', fileId)
-    formData.append('showCover', showCover.toString())
-    return request.post('/chat/downloadFile', formData, {
+    return request.post<unknown, ApiResponse<null>>('/chat/uploadFile', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
-      responseType: 'blob'
     })
-  }
+  },
+
+  loadChatMessage(contactId: string, pageNo = 1) {
+    return request.post<unknown, ApiResponse<PaginationResult<BackendChatMessage>>>('/chat/loadChatMessage', null, {
+      params: { contactId, pageNo },
+    })
+  },
 }

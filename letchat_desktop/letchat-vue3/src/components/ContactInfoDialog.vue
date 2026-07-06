@@ -1,226 +1,181 @@
 <template>
-  <el-dialog
-    v-model="visible"
-    :title="contact?.contactType === 'G' ? '群组详情' : '联系人详情'"
-    width="400px"
-    destroy-on-close
-  >
-    <div class="contact-info" v-if="contact">
-      <div class="avatar-section">
-        <el-avatar :src="contact.avatar || defaultAvatar" :size="80" />
+  <el-dialog v-model="visible" :title="contact?.contactType === 'G' ? '群聊详情' : '联系人详情'" width="460px" destroy-on-close @open="loadDetails">
+    <div v-if="contact" v-loading="loading" class="detail">
+      <div class="hero">
+        <div class="lc-avatar hero-avatar" :class="{ group: contact.contactType === 'G' }">
+          {{ contact.contactName.slice(0, 2).toUpperCase() }}
+        </div>
         <h3>{{ contact.contactName }}</h3>
+        <p>{{ contact.contactId }}</p>
       </div>
-      
-      <div class="info-section" v-if="contactDetails">
-        <el-descriptions :column="1" border>
-          <el-descriptions-item label="ID">
-            {{ contact.contactId }}
-          </el-descriptions-item>
-          
-          <template v-if="contact.contactType === 'U'">
-            <el-descriptions-item label="邮箱">
-              {{ contactDetails.email }}
-            </el-descriptions-item>
-            <el-descriptions-item label="昵称">
-              {{ contactDetails.nickName }}
-            </el-descriptions-item>
-            <el-descriptions-item label="性别">
-              {{ contactDetails.sex === 1 ? '男' : '女' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="地区">
-              {{ contactDetails.areaName || '未知' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="个性签名">
-              {{ contactDetails.personalSignature || '暂无' }}
-            </el-descriptions-item>
-          </template>
-          
-          <template v-else>
-            <el-descriptions-item label="群公告">
-              {{ contactDetails.groupNotice || '暂无' }}
-            </el-descriptions-item>
-            <el-descriptions-item label="成员数">
-              {{ contactDetails.memberCount || 0 }}
-            </el-descriptions-item>
-            <el-descriptions-item label="创建时间">
-              {{ formatDate(contactDetails.createTime) }}
-            </el-descriptions-item>
-          </template>
-        </el-descriptions>
+
+      <div class="info-grid">
+        <div>
+          <span>类型</span>
+          <strong>{{ contact.contactType === 'G' ? '群聊' : '好友' }}</strong>
+        </div>
+        <div>
+          <span>{{ contact.contactType === 'G' ? '成员数' : '地区' }}</span>
+          <strong>{{ contact.contactType === 'G' ? groupDetail?.memberCount || contact.memberCount || 0 : userDetail?.areaName || '未设置' }}</strong>
+        </div>
+        <div class="wide">
+          <span>{{ contact.contactType === 'G' ? '公告' : '个性签名' }}</span>
+          <strong>{{ contact.contactType === 'G' ? groupDetail?.groupNotice || '暂无公告' : userDetail?.personalSignature || '这个人还没有留下签名' }}</strong>
+        </div>
       </div>
-      
-      <div class="actions" v-if="contact.contactType === 'U'">
-        <el-button type="danger" @click="handleDeleteContact">
-          删除好友
-        </el-button>
-        <el-button type="warning" @click="handleAddToBlacklist">
-          加入黑名单
-        </el-button>
-      </div>
-      
-      <div class="actions" v-else>
-        <el-button type="danger" @click="handleLeaveGroup">
-          退出群聊
-        </el-button>
+
+      <div class="actions">
+        <template v-if="contact.contactType === 'U'">
+          <el-button @click="deleteContact">删除好友</el-button>
+          <el-button type="danger" plain @click="blacklist">加入黑名单</el-button>
+        </template>
+        <el-button v-else type="danger" plain @click="leaveGroup">退出群聊</el-button>
       </div>
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, computed } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import request from '@/utils/request'
-import type { ContactInfo } from '@/types/api'
+import { contactApi } from '@/api/contact'
+import type { ContactInfo, GroupInfo, UserInfo } from '@/types/api'
 
-interface Props {
+const props = defineProps<{
   modelValue: boolean
   contact: ContactInfo | null
-}
+}>()
 
-interface Emits {
-  (e: 'update:modelValue', value: boolean): void
-}
-
-const props = defineProps<Props>()
-const emit = defineEmits<Emits>()
-
-const defaultAvatar = 'https://cube.elemecdn.com/3/7c/3ea6beec64369c2642b92c6726f1epng.png'
-const contactDetails = ref<any>(null)
-const loading = ref(false)
+const emit = defineEmits<{
+  'update:modelValue': [value: boolean]
+  changed: []
+}>()
 
 const visible = computed({
   get: () => props.modelValue,
-  set: (val) => emit('update:modelValue', val)
+  set: (value) => emit('update:modelValue', value),
 })
 
-// 获取联系人详情
-  const loadContactDetails = async () => {
-    if (!props.contact) return
-    
-    loading.value = true
-    try {
-      const endpoint = props.contact.contactType === 'U' 
-        ? '/contact/getContactUserInfo' 
-        : '/contact/getGroupInfo'
-      
-      const response = await request.post(endpoint, null, {
-        params: { contactId: props.contact.contactId }
-      })
-      contactDetails.value = response.data
-    } catch (error) {
-      console.error('获取联系人详情失败:', error)
-    } finally {
-      loading.value = false
-    }
-  }
+const loading = ref(false)
+const userDetail = ref<UserInfo | null>(null)
+const groupDetail = ref<GroupInfo | null>(null)
 
-// 删除好友
-const handleDeleteContact = async () => {
-  if (!props.contact || props.contact.contactType !== 'U') return
-  
+async function loadDetails() {
+  if (!props.contact) return
+  loading.value = true
   try {
-    await ElMessageBox.confirm('确定要删除该好友吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    await request.post('/contact/delContact', null, {
-        params: { contactId: props.contact.contactId }
-      })
-    ElMessage.success('删除成功')
-    visible.value = false
-    // 通知父组件刷新联系人列表
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('删除失败')
+    if (props.contact.contactType === 'G') {
+      const response = await contactApi.getGroupInfo(props.contact.contactId)
+      groupDetail.value = response.data
+    } else {
+      const response = await contactApi.getContactUserInfo(props.contact.contactId)
+      userDetail.value = response.data
     }
+  } finally {
+    loading.value = false
   }
 }
 
-// 加入黑名单
-const handleAddToBlacklist = async () => {
-  if (!props.contact || props.contact.contactType !== 'U') return
-  
-  try {
-    await ElMessageBox.confirm('确定要将该好友加入黑名单吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    await request.post('/contact/addContact2BlackList', null, {
-        params: { contactId: props.contact.contactId }
-      })
-    ElMessage.success('加入黑名单成功')
-    visible.value = false
-    // 通知父组件刷新联系人列表
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('操作失败')
-    }
-  }
+async function deleteContact() {
+  if (!props.contact) return
+  await ElMessageBox.confirm('确定删除这个好友吗？', '删除联系人', { type: 'warning' })
+  await contactApi.deleteContact(props.contact.contactId)
+  ElMessage.success('已删除好友')
+  visible.value = false
+  emit('changed')
 }
 
-// 退出群聊
-const handleLeaveGroup = async () => {
-  if (!props.contact || props.contact.contactType !== 'G') return
-  
-  try {
-    await ElMessageBox.confirm('确定要退出该群聊吗？', '提示', {
-      confirmButtonText: '确定',
-      cancelButtonText: '取消',
-      type: 'warning'
-    })
-    
-    await request.post('/contact/leaveGroup', null, {
-        params: { groupId: props.contact.contactId }
-      })
-    ElMessage.success('退出群聊成功')
-    visible.value = false
-    // 通知父组件刷新联系人列表
-  } catch (error) {
-    if (error !== 'cancel') {
-      ElMessage.error('退出失败')
-    }
-  }
+async function blacklist() {
+  if (!props.contact) return
+  await ElMessageBox.confirm('确定把这个好友加入黑名单吗？', '加入黑名单', { type: 'warning' })
+  await contactApi.addContactToBlacklist(props.contact.contactId)
+  ElMessage.success('已加入黑名单')
+  visible.value = false
+  emit('changed')
 }
 
-const formatDate = (date?: string) => {
-  if (!date) return ''
-  return new Date(date).toLocaleDateString('zh-CN')
+async function leaveGroup() {
+  if (!props.contact) return
+  await ElMessageBox.confirm('确定退出这个群聊吗？', '退出群聊', { type: 'warning' })
+  await contactApi.leaveGroup(props.contact.contactId)
+  ElMessage.success('已退出群聊')
+  visible.value = false
+  emit('changed')
 }
-
-// 监听联系人变化，加载详情
-watch(() => props.contact, (newContact) => {
-  if (newContact && visible.value) {
-    loadContactDetails()
-  }
-}, { immediate: true })
 </script>
 
 <style scoped>
-.contact-info {
+.detail {
+  padding: 4px 0 0;
+}
+
+.hero {
+  display: grid;
+  place-items: center;
+  padding: 18px 0 22px;
   text-align: center;
 }
 
-.avatar-section {
-  margin-bottom: 20px;
+.hero-avatar {
+  width: 76px;
+  height: 76px;
+  border-radius: 24px;
+  font-size: 22px;
 }
 
-.avatar-section h3 {
-  margin: 10px 0 0;
-  color: #333;
+.hero-avatar.group {
+  background: linear-gradient(145deg, #253c47, #0f8f76);
 }
 
-.info-section {
-  margin-bottom: 20px;
+.hero h3 {
+  margin: 14px 0 4px;
+  font-size: 22px;
+  font-weight: 900;
+}
+
+.hero p {
+  margin: 0;
+  color: var(--lc-muted);
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.info-grid div {
+  min-height: 76px;
+  padding: 12px;
+  border: 1px solid var(--lc-line);
+  border-radius: 14px;
+  background: var(--lc-panel);
+}
+
+.info-grid .wide {
+  grid-column: 1 / -1;
+}
+
+.info-grid span,
+.info-grid strong {
+  display: block;
+}
+
+.info-grid span {
+  color: var(--lc-soft);
+  font-size: 12px;
+}
+
+.info-grid strong {
+  margin-top: 8px;
+  font-weight: 850;
+  word-break: break-word;
 }
 
 .actions {
   display: flex;
-  justify-content: center;
+  justify-content: flex-end;
   gap: 10px;
+  margin-top: 18px;
 }
 </style>

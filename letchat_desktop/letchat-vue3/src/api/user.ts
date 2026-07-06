@@ -1,28 +1,31 @@
 import request from '@/utils/request'
-import type { UserInfo, ApiResponse } from '@/types/api'
+import type { ApiResponse, UserInfo } from '@/types/api'
 
 export const userApi = {
-  // 获取用户信息
-  getUserInfo: () => {
-    return request.post<ApiResponse<UserInfo>>('/userInfo/getUserInfo')
+  getUserInfo() {
+    return request.post<unknown, ApiResponse<UserInfo>>('/userInfo/getUserInfo')
   },
 
-  // 保存用户信息
-  saveUserInfo: (userInfo: Partial<UserInfo>) => {
-    return request.post<ApiResponse>('/userInfo/saveUserInfo', null, {
-      params: userInfo
+  saveUserInfo(userInfo: Partial<UserInfo>) {
+    const formData = new FormData()
+    Object.entries(userInfo).forEach(([key, value]) => {
+      if (value !== undefined && value !== null) {
+        formData.append(key, String(value))
+      }
+    })
+
+    return request.post<unknown, ApiResponse<UserInfo>>('/userInfo/saveUserInfo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     })
   },
 
-  // 更新密码
-  updatePassword: (password: string) => {
-    return request.post<ApiResponse>('/userInfo/updatePassword', null, {
-      params: { password }
+  updatePassword(password: string) {
+    return request.post<unknown, ApiResponse<null>>('/userInfo/updatePassword', null, {
+      params: { password },
     })
   },
 
-  // 用户登出
-  logout: () => {
-    return request.post<ApiResponse>('/userInfo/logout')
-  }
+  logout() {
+    return request.post<unknown, ApiResponse<string>>('/userInfo/logout')
+  },
 }

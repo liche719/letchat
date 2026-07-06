@@ -2,6 +2,8 @@
 
 LetChat is a full-stack chat application with a Spring Boot backend and a Vue 3 desktop/web frontend. It supports account login, contacts, group chats, WebSocket messaging, and file-style message flows.
 
+For resume and interview preparation, see [Letchat 简历证据链与面试讲法](docs/resume-project-evidence.md). It summarizes the project background, backend responsibilities, technical tradeoffs, code evidence, runtime validation, and interview-ready STAR answers.
+
 ## Project Structure
 
 ```text

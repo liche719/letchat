@@ -1,207 +1,250 @@
 <template>
-  <div class="register-container">
-    <div class="register-box">
-      <h2>LetChat 注册</h2>
-      <el-form ref="registerFormRef" :model="registerForm" :rules="rules" label-width="80px">
+  <main class="auth-shell compact">
+    <section class="auth-panel">
+      <div class="brand">
+        <div class="brand-mark">LC</div>
+        <div>
+          <p class="eyebrow">LetChat Workspace</p>
+          <h1>创建账号</h1>
+        </div>
+      </div>
+
+      <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="auth-form" @keyup.enter="handleRegister">
         <el-form-item label="邮箱" prop="email">
-          <el-input v-model="registerForm.email" placeholder="请输入邮箱" />
+          <el-input v-model="form.email" size="large" placeholder="name@example.com" :prefix-icon="Message" />
         </el-form-item>
-        
+
         <el-form-item label="昵称" prop="nickName">
-          <el-input v-model="registerForm.nickName" placeholder="请输入昵称" />
+          <el-input v-model="form.nickName" size="large" placeholder="你想让朋友看到的名字" :prefix-icon="User" />
         </el-form-item>
-        
+
         <el-form-item label="密码" prop="password">
-          <el-input 
-            v-model="registerForm.password" 
-            type="password" 
-            placeholder="请输入密码"
-            show-password
-          />
+          <el-input v-model="form.password" size="large" type="password" show-password placeholder="8-18 位，包含字母和数字" :prefix-icon="Lock" />
         </el-form-item>
-        
+
         <el-form-item label="确认密码" prop="confirmPassword">
-          <el-input 
-            v-model="registerForm.confirmPassword" 
-            type="password" 
-            placeholder="请再次输入密码"
-            show-password
-          />
+          <el-input v-model="form.confirmPassword" size="large" type="password" show-password placeholder="再次输入密码" :prefix-icon="Lock" />
         </el-form-item>
-        
+
         <el-form-item label="验证码" prop="checkCode">
-          <div class="verify-code">
-            <el-input v-model="registerForm.checkCode" placeholder="请输入验证码" />
-            <img 
-              :src="verifyCodeUrl" 
-              @click="refreshVerifyCode" 
-              class="verify-img"
-              alt="验证码"
-            />
+          <div class="captcha-row">
+            <el-input v-model="form.checkCode" size="large" placeholder="4 位验证码" :prefix-icon="Key" />
+            <button
+              class="captcha"
+              :class="{ unavailable: captchaUnavailable }"
+              type="button"
+              @click="refreshCaptcha"
+              title="刷新验证码"
+            >
+              <img v-if="captchaUrl" :src="captchaUrl" alt="验证码" />
+              <Refresh v-else :size="18" />
+            </button>
           </div>
         </el-form-item>
-        
-        <el-form-item>
-          <el-button 
-            type="primary" 
-            @click="handleRegister" 
-            :loading="loading"
-            class="register-btn"
-          >
-            注册
-          </el-button>
-        </el-form-item>
-        
-        <div class="login-link">
-          <el-button type="text" @click="goToLogin">已有账号？立即登录</el-button>
-        </div>
+
+        <el-button type="primary" size="large" class="submit" :loading="loading" @click="handleRegister">
+          注册
+        </el-button>
       </el-form>
-    </div>
-  </div>
+
+      <div class="switch-line">
+        <span>已有账号？</span>
+        <button type="button" @click="router.push('/login')">返回登录</button>
+      </div>
+    </section>
+  </main>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import request from '@/utils/request'
+import { Key, Lock, Message, Refresh, User } from '@element-plus/icons-vue'
 import { authApi } from '@/api/auth'
 
 const router = useRouter()
-
-const registerFormRef = ref()
+const formRef = ref<FormInstance>()
 const loading = ref(false)
-const verifyCodeUrl = ref('')
+const captchaUrl = ref('')
 const checkCodeKey = ref('')
+const captchaUnavailable = ref(false)
 
-const registerForm = ref({
+const form = reactive({
   email: '',
   nickName: '',
   password: '',
   confirmPassword: '',
-  checkCode: ''
+  checkCode: '',
 })
 
-const validateConfirmPassword = (rule: any, value: string, callback: any) => {
-  if (value !== registerForm.value.password) {
-    callback(new Error('两次输入的密码不一致'))
-  } else {
-    callback()
-  }
-}
-
-const rules = {
+const rules: FormRules = {
   email: [
     { required: true, message: '请输入邮箱', trigger: 'blur' },
-    { type: 'email', message: '请输入正确的邮箱格式', trigger: 'blur' }
+    { type: 'email', message: '邮箱格式不正确', trigger: 'blur' },
   ],
   nickName: [
     { required: true, message: '请输入昵称', trigger: 'blur' },
-    { min: 2, max: 20, message: '昵称长度2-20位', trigger: 'blur' }
+    { min: 2, max: 20, message: '昵称长度 2-20 位', trigger: 'blur' },
   ],
   password: [
     { required: true, message: '请输入密码', trigger: 'blur' },
-    { min: 8, max: 18, message: '密码长度8-18位', trigger: 'blur' },
-    { pattern: /^(?=.*\d)(?=.*[a-zA-Z])[\da-zA-Z~!@#$%^&*_]{8,18}$/, message: '密码必须包含字母和数字', trigger: 'blur' }
+    { pattern: /^(?=.*\d)(?=.*[a-zA-Z])[\da-zA-Z~!@#$%^&*_]{8,18}$/, message: '密码需 8-18 位，包含字母和数字', trigger: 'blur' },
   ],
   confirmPassword: [
     { required: true, message: '请再次输入密码', trigger: 'blur' },
-    { validator: validateConfirmPassword, trigger: 'blur' }
+    {
+      validator: (_rule, value, callback) => {
+        if (value !== form.password) callback(new Error('两次密码不一致'))
+        else callback()
+      },
+      trigger: 'blur',
+    },
   ],
-  checkCode: [
-    { required: true, message: '请输入验证码', trigger: 'blur' }
-  ]
+  checkCode: [{ required: true, message: '请输入验证码', trigger: 'blur' }],
 }
 
-const refreshVerifyCode = async () => {
+async function refreshCaptcha() {
+  captchaUnavailable.value = false
   try {
-    const response = await authApi.getCheckCode('', '0')
-    verifyCodeUrl.value = response.data.checkCode
+    const response = await authApi.getCheckCode()
+    captchaUrl.value = response.data.checkCode
     checkCodeKey.value = response.data.checkCodeKey
-  } catch (error) {
-    console.error('获取验证码失败:', error)
-    ElMessage.error('获取验证码失败')
+  } catch {
+    captchaUrl.value = ''
+    checkCodeKey.value = ''
+    captchaUnavailable.value = true
   }
 }
 
-const handleRegister = async () => {
-  if (!registerFormRef.value) return
-  
-  await registerFormRef.value.validate(async (valid: boolean) => {
-    if (!valid) return
-    
-    loading.value = true
-    try {
-      await authApi.register(
-        registerForm.value.email,
-        registerForm.value.password,
-        registerForm.value.nickName,
-        registerForm.value.checkCode,
-        checkCodeKey.value
-      )
-      
-      ElMessage.success('注册成功，请登录')
-      router.push('/login')
-    } catch (error: any) {
-      ElMessage.error(error.message || '注册失败')
-      refreshVerifyCode()
-    } finally {
-      loading.value = false
-    }
-  })
+async function handleRegister() {
+  const valid = await formRef.value?.validate().catch(() => false)
+  if (!valid) return
+
+  loading.value = true
+  try {
+    await authApi.register(form.email, form.password, form.nickName, form.checkCode, checkCodeKey.value)
+    ElMessage.success('注册成功，请登录')
+    router.push('/login')
+  } catch {
+    form.checkCode = ''
+    await refreshCaptcha()
+  } finally {
+    loading.value = false
+  }
 }
 
-const goToLogin = () => {
-  router.push('/login')
-}
-
-onMounted(() => {
-  refreshVerifyCode()
-})
+onMounted(refreshCaptcha)
 </script>
 
 <style scoped>
-.register-container {
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+.auth-shell {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 24px;
 }
 
-.register-box {
-  background: white;
-  padding: 40px;
-  border-radius: 10px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
-  width: 400px;
+.auth-panel {
+  width: min(460px, 100%);
+  padding: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 22px;
+  background: rgba(255, 255, 255, 0.84);
+  box-shadow: var(--lc-shadow);
+  backdrop-filter: blur(22px);
 }
 
-h2 {
-  text-align: center;
-  margin-bottom: 30px;
-  color: #333;
-}
-
-.verify-code {
+.brand {
   display: flex;
   align-items: center;
+  gap: 16px;
+}
+
+.brand-mark {
+  display: grid;
+  place-items: center;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  color: #ffffff;
+  font-size: 18px;
+  font-weight: 900;
+  background: linear-gradient(145deg, #0f8f76, #123b34);
+}
+
+.eyebrow,
+h1 {
+  margin: 0;
+}
+
+.eyebrow {
+  margin-bottom: 4px;
+  color: var(--lc-accent);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+h1 {
+  font-size: 32px;
+  font-weight: 900;
+}
+
+.auth-form {
+  margin-top: 26px;
+}
+
+.captcha-row {
+  display: grid;
+  grid-template-columns: 1fr 116px;
   gap: 10px;
-}
-
-.verify-img {
-  height: 32px;
-  cursor: pointer;
-  border: 1px solid #dcdfe6;
-  border-radius: 4px;
-}
-
-.register-btn {
   width: 100%;
 }
 
-.login-link {
-  text-align: center;
+.captcha {
+  display: grid;
+  place-items: center;
+  height: 40px;
+  border: 1px solid var(--lc-line);
+  border-radius: 10px;
+  background: #ffffff;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.captcha img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.captcha.unavailable {
+  color: var(--lc-accent);
+  background: var(--lc-accent-soft);
+}
+
+.submit {
+  width: 100%;
+  margin-top: 4px;
+  border-radius: 12px;
+  font-weight: 800;
+}
+
+.switch-line {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
   margin-top: 20px;
+  color: var(--lc-muted);
+}
+
+.switch-line button {
+  border: 0;
+  color: var(--lc-accent);
+  font-weight: 800;
+  background: transparent;
+  cursor: pointer;
 }
 </style>
