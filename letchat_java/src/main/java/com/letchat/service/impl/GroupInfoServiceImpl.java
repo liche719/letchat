@@ -27,6 +27,9 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Date;
 import java.util.List;
 
@@ -211,14 +214,20 @@ public class GroupInfoServiceImpl implements GroupInfoService {
             return;
         }
 
-        String baseFolder = appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE;
-        File targetFileFolder = new File(baseFolder + Constants.FILE_FOLDER_AVATAR_NAME);
-        if (!targetFileFolder.exists()) {
-            targetFileFolder.mkdirs();
+        Path avatarFolder = new File(
+                appConfig.getProjectFolderPath().toString()
+                        + Constants.FILE_FOLDER_FILE
+                        + Constants.FILE_FOLDER_AVATAR_NAME
+        ).toPath().toAbsolutePath().normalize();
+        Files.createDirectories(avatarFolder);
+        Path avatarPath = avatarFolder.resolve(groupInfo.getGroupId() + Constants.IMAGE_SUFFIX);
+        avatarFile.transferTo(avatarPath.toFile());
+        Path coverPath = avatarFolder.resolve(groupInfo.getGroupId() + Constants.IMAGE_SUFFIX + Constants.COVER_IMAGES_SUFFIX);
+        if (avatarCover == null || avatarCover.isEmpty()) {
+            Files.copy(avatarPath, coverPath, StandardCopyOption.REPLACE_EXISTING);
+        } else {
+            avatarCover.transferTo(coverPath.toFile());
         }
-        String filePath = targetFileFolder.getPath() + "/" + groupInfo.getGroupId() + Constants.IMAGE_SUFFIX;
-        avatarFile.transferTo(new File(filePath));
-        avatarCover.transferTo(new File(filePath + Constants.IMAGE_SUFFIX));
     }
 
     @Override

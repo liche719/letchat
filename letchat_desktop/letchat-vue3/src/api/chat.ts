@@ -1,4 +1,6 @@
 import request from '@/utils/request'
+import axios from 'axios'
+import { TOKEN_KEY } from '@/utils/request'
 import type { ApiResponse, BackendChatMessage, PaginationResult } from '@/types/api'
 
 export interface SendMessageParams {
@@ -30,5 +32,14 @@ export const chatApi = {
     return request.post<unknown, ApiResponse<PaginationResult<BackendChatMessage>>>('/chat/loadChatMessage', null, {
       params: { contactId, pageNo },
     })
+  },
+
+  async downloadFile(fileId: string, showCover = false) {
+    const response = await axios.get<Blob>('/api/chat/downloadFile', {
+      params: { fileId, showCover },
+      responseType: 'blob',
+      headers: { token: localStorage.getItem(TOKEN_KEY) || localStorage.getItem('token') || '' },
+    })
+    return response.data
   },
 }

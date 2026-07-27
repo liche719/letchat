@@ -5,6 +5,8 @@ server:
 
 ws:
   port: ${WS_PORT:7071}
+  read-idle-seconds: ${WS_READ_IDLE_SECONDS:75}
+  heartbeat-expire-seconds: ${WS_HEARTBEAT_EXPIRE_SECONDS:90}
 
 spring:
   application:
@@ -74,3 +76,13 @@ kimi:
   enabled: ${KIMI_ENABLED:false}
   api-key: ${KIMI_API_KEY:}
   model: ${KIMI_MODEL:moonshot-v1-8k}
+
+letchat:
+  message-id:
+    worker-id: ${CHAT_MESSAGE_WORKER_ID:0}
+  message-upload:
+    metadata-wait-timeout-ms: ${CHAT_MESSAGE_METADATA_WAIT_TIMEOUT_MS:3000}
+    metadata-poll-interval-ms: ${CHAT_MESSAGE_METADATA_POLL_INTERVAL_MS:50}
+  rabbitmq:
+    publisher-confirm-timeout-ms: ${CHAT_PUBLISHER_CONFIRM_TIMEOUT_MS:3000}
+    publisher-max-retries: ${CHAT_PUBLISHER_MAX_RETRIES:3}

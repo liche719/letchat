@@ -1,5 +1,6 @@
 package com.letchat.redis;
 
+import com.letchat.config.AppConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.SysSettingDto;
 import com.letchat.entity.dto.TokenUserInfoDto;
@@ -16,12 +17,20 @@ public class RedisComponent {
     @Resource
     private RedisTemplate<String, Object> redisTemplate;
 
+    @Resource
+    private AppConfig appConfig;
+
     public Long getUserHeartBeat(String userId) {
         return (Long) redisTemplate.opsForValue().get(Constants.REDIS_KEY_WS_USER_HEART_BEAT + userId);
     }
 
     public void saveHeartBeat(String userId) {
-        redisTemplate.opsForValue().set(Constants.REDIS_KEY_WS_USER_HEART_BEAT + userId, System.currentTimeMillis(), Constants.REDIS_KEY_EXPIRES_HEART_BEAT, TimeUnit.SECONDS);
+        redisTemplate.opsForValue().set(
+                Constants.REDIS_KEY_WS_USER_HEART_BEAT + userId,
+                System.currentTimeMillis(),
+                appConfig.getWsHeartbeatExpireSeconds(),
+                TimeUnit.SECONDS
+        );
     }
 
     public void removeUserHeartBeat(String userId) {
@@ -39,6 +48,9 @@ public class RedisComponent {
 
     public TokenUserInfoDto getTokenUserInfoDtoByUserId(String userId) {
         String token = (String) redisTemplate.opsForValue().get(Constants.REDIS_KEY_WS_TOKEN_USERID + userId);
+        if (token == null) {
+            return null;
+        }
         return getTokenUserInfoDto(token);
     }
 

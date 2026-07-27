@@ -45,6 +45,8 @@ public interface UserInfoService {
 
     UserInfoVO login(String email, String password);
 
+    void updatePassword(String userId, String password);
+
     void updateUserInfo(UserInfo userInfo, MultipartFile avatarFile, MultipartFile avatarCover) throws IOException;
 
     void updateUserStatus(Integer status, String userId);

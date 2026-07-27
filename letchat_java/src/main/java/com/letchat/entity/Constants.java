@@ -4,8 +4,6 @@ import com.letchat.entity.enums.UserContactTypeEnum;
 
 public class Constants {
 
-    public static final Integer REDIS_KEY_EXPIRES_HEART_BEAT = 5;
-
     public static final Integer REDIS_TIME_1MIN = 60;   //TimeUnit.SECONDS
 
     public static final Integer REDIS_KEY_EXPIRES_DAY = REDIS_TIME_1MIN * 60 * 24;

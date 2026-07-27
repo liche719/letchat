@@ -13,6 +13,9 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 
 @RestController("adminSettingController")
 @RequestMapping("/admin")
@@ -37,14 +40,20 @@ public class AdminSettingController extends ABaseController {
     @GlobalInterception(checkAdmin = true)
     public ResponseVO saveSysSetting(SysSettingDto sysSettingDto, MultipartFile robotFile, MultipartFile robotCover) throws IOException {
         if (robotFile != null) {
-            String baseFolder = appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE;
-            File targetFileFolder = new File(baseFolder + Constants.FILE_FOLDER_AVATAR_NAME);
-            if (!targetFileFolder.exists()) {
-                targetFileFolder.mkdirs();
+            Path avatarFolder = new File(
+                    appConfig.getProjectFolderPath().toString()
+                            + Constants.FILE_FOLDER_FILE
+                            + Constants.FILE_FOLDER_AVATAR_NAME
+            ).toPath().toAbsolutePath().normalize();
+            Files.createDirectories(avatarFolder);
+            Path avatarPath = avatarFolder.resolve(Constants.ROBOT_UID + Constants.IMAGE_SUFFIX);
+            robotFile.transferTo(avatarPath.toFile());
+            Path coverPath = avatarFolder.resolve(Constants.ROBOT_UID + Constants.IMAGE_SUFFIX + Constants.COVER_IMAGES_SUFFIX);
+            if (robotCover == null || robotCover.isEmpty()) {
+                Files.copy(avatarPath, coverPath, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                robotCover.transferTo(coverPath.toFile());
             }
-            String filePath = targetFileFolder.getPath() + "/" + Constants.ROBOT_UID + Constants.IMAGE_SUFFIX;
-            robotFile.transferTo(new File(filePath));
-            robotCover.transferTo(new File(filePath + Constants.COVER_IMAGES_SUFFIX));
         }
         redisComponent.saveSysSetting(sysSettingDto);
         return getSuccessResponseVO(null);

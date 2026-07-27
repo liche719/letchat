@@ -1,11 +1,20 @@
 <template>
-  <el-dialog v-model="visible" title="添加联系人" width="520px" destroy-on-close class="contact-search-dialog">
+  <el-dialog
+    v-model="visible"
+    title="添加联系人"
+    width="520px"
+    destroy-on-close
+    class="contact-search-dialog"
+  >
     <div class="search-panel">
       <div class="search-line">
         <el-input
           v-model="keyword"
           size="large"
-          placeholder="输入用户 ID、群 ID 或邮箱"
+          placeholder="输入用户号、群号或邮箱…"
+          aria-label="搜索用户或群聊"
+          autocomplete="off"
+          spellcheck="false"
           clearable
           :prefix-icon="Search"
           @keyup.enter="search"
@@ -18,7 +27,9 @@
         <div class="result-main">
           <strong>{{ resultName }}</strong>
           <span>{{ result.contactId }}</span>
-          <small>{{ result.areaName || '未设置地区' }} · {{ result.statusName || statusLabel }}</small>
+          <small
+            >{{ result.areaName || '未设置地区' }} · {{ result.statusName || statusLabel }}</small
+          >
         </div>
         <el-button type="primary" plain :disabled="result.status === 1" @click="openApply">
           {{ result.status === 1 ? '已添加' : '申请' }}
@@ -28,13 +39,13 @@
       <div v-else-if="searched" class="empty-state compact">
         <div class="mini-icon"><Search /></div>
         <strong>没有找到联系人</strong>
-        <span>请检查 ID 是否完整，群聊通常以 G 开头，用户通常以 U 开头。</span>
+        <span>请检查输入的用户号、群号或邮箱是否正确。</span>
       </div>
 
       <div v-else class="empty-state">
         <div class="mini-icon"><Plus /></div>
         <strong>搜索用户或群聊</strong>
-        <span>输入完整 ID 后可以发送好友申请或入群申请。</span>
+        <span>输入对方的用户号、群号或邮箱即可搜索。</span>
       </div>
     </div>
 
@@ -80,7 +91,9 @@ const loading = ref(false)
 const applyVisible = ref(false)
 const applyInfo = ref('你好，我想添加你为联系人。')
 
-const resultName = computed(() => result.value?.nickName || result.value?.contactName || result.value?.contactId || '')
+const resultName = computed(
+  () => result.value?.nickName || result.value?.contactName || result.value?.contactId || '',
+)
 const statusLabel = computed(() => (result.value?.status === 1 ? '已是联系人' : '可申请'))
 
 async function search() {
@@ -127,24 +140,24 @@ async function submitApply() {
 .search-line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 72px;
-  gap: 10px;
+  gap: 9px;
 }
 
 .result-row {
   display: grid;
-  grid-template-columns: 48px minmax(0, 1fr) auto;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
   align-items: center;
   gap: 13px;
   padding: 14px;
-  border: 1px solid var(--lc-line);
-  border-radius: 12px;
-  background: var(--lc-surface-subtle);
+  border: 1px solid var(--lc-line-strong);
+  border-left: 2px solid var(--lc-accent);
+  border-radius: 14px;
+  background: var(--lc-panel);
 }
 
 .result-avatar {
-  width: 48px;
-  height: 48px;
-  border-radius: 14px;
+  width: 46px;
+  height: 46px;
 }
 
 .result-main {
@@ -161,8 +174,9 @@ async function submitApply() {
 }
 
 .result-main strong {
+  color: var(--lc-text);
   font-size: 15px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .result-main span {
@@ -174,19 +188,21 @@ async function submitApply() {
 .result-main small {
   margin-top: 4px;
   color: var(--lc-soft);
+  font-size: 11px;
 }
 
 .empty-state {
+  position: relative;
   display: grid;
   justify-items: center;
   gap: 8px;
   min-height: 148px;
   padding: 26px 24px;
   border: 1px dashed var(--lc-line-strong);
-  border-radius: 12px;
+  border-radius: 14px;
   color: var(--lc-muted);
   text-align: center;
-  background: linear-gradient(180deg, rgba(248, 250, 248, 0.82), rgba(255, 255, 255, 0.74));
+  background: var(--lc-surface-subtle);
 }
 
 .empty-state.compact {
@@ -194,29 +210,42 @@ async function submitApply() {
 }
 
 .mini-icon {
+  position: relative;
   display: grid;
   place-items: center;
   width: 38px;
   height: 38px;
-  border-radius: 11px;
+  border: 1px solid var(--lc-line-strong);
+  border-radius: 50%;
   color: var(--lc-accent);
-  background: var(--lc-accent-soft);
+  background: var(--lc-surface);
 }
 
 .mini-icon :deep(svg) {
-  width: 18px;
-  height: 18px;
+  width: 16px;
+  height: 16px;
 }
 
 .empty-state strong {
   color: var(--lc-text);
   font-size: 14px;
-  font-weight: 850;
+  font-weight: 600;
 }
 
 .empty-state span {
   max-width: 300px;
   font-size: 12px;
-  line-height: 1.6;
+  line-height: 1.65;
+}
+
+@media (max-width: 440px) {
+  .result-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .result-row > .el-button {
+    grid-column: 2;
+    width: fit-content;
+  }
 }
 </style>

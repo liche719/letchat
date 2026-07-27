@@ -9,7 +9,6 @@ import com.letchat.entity.vo.UserInfoVO;
 import com.letchat.redis.RedisComponent;
 import com.letchat.service.UserInfoService;
 import com.letchat.utils.CopyTools;
-import com.letchat.utils.StringTools;
 import com.letchat.websocket.ChannelContextUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -88,10 +87,7 @@ public class UserInfoController extends ABaseController {
     public ResponseVO updatePassword(HttpServletRequest request,
                                      @NotNull @Pattern(regexp = Constants.REGEX_PASSWORD) String password) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        System.out.println(password);
-        UserInfo userInfo = new UserInfo();
-        userInfo.setPassword(StringTools.encodeMD5(password));
-        this.userInfoService.updateUserInfoByUserId(userInfo, tokenUserInfoDto.getUserId());
+        this.userInfoService.updatePassword(tokenUserInfoDto.getUserId(), password);
         channelContextUtils.closeContext(tokenUserInfoDto.getUserId());
         return getSuccessResponseVO(null);
     }

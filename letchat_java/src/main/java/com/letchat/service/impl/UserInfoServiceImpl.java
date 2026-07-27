@@ -18,6 +18,8 @@ import com.letchat.mappers.UserContactMapper;
 import com.letchat.mappers.UserInfoBeautyMapper;
 import com.letchat.mappers.UserInfoMapper;
 import com.letchat.redis.RedisComponent;
+import com.letchat.security.PasswordManager;
+import com.letchat.security.SecureTokenGenerator;
 import com.letchat.service.ChatSessionUserService;
 import com.letchat.service.UserContactService;
 import com.letchat.service.UserInfoService;
@@ -32,6 +34,9 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.StandardCopyOption;
 import java.util.Date;
 import java.util.List;
 import java.util.stream.Collectors;
@@ -66,6 +71,12 @@ public class UserInfoServiceImpl implements UserInfoService {
 
     @Resource
     private ChatSessionUserService chatSessionUserService;
+
+    @Resource
+    private PasswordManager passwordManager;
+
+    @Resource
+    private SecureTokenGenerator secureTokenGenerator;
 
     /**
      * 根据条件查询列表
@@ -131,7 +142,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         }
         Date curData = new Date();
         userInfo = new UserInfo();
-        userInfo.setUserId(userId).setNickName(nickName).setEmail(email).setPassword(StringTools.encodeMD5(password)).setCreateTime(curData).setStatus(UserStatusEnum.ENABLE.getStatus()).setLastOffTime(curData.getTime()).setJoinType(JoinTypeEnum.APPLY.getType());
+        userInfo.setUserId(userId).setNickName(nickName).setEmail(email).setPassword(passwordManager.encode(password)).setCreateTime(curData).setStatus(UserStatusEnum.ENABLE.getStatus()).setLastOffTime(curData.getTime()).setJoinType(JoinTypeEnum.APPLY.getType());
         userInfoMapper.insert(userInfo);
 
         if (userBeautyAccount) {
@@ -146,13 +157,20 @@ public class UserInfoServiceImpl implements UserInfoService {
     }
 
     @Override
+    @Transactional(rollbackFor = Exception.class)
     public UserInfoVO login(String email, String password) {
         UserInfo userInfo = userInfoMapper.selectByEmail(email);
-        if (null == userInfo || !userInfo.getPassword().equals(password)) {
+        if (null == userInfo || !passwordManager.matches(password, userInfo.getPassword())) {
             throw new BusinessException("账号或密码错误");
         }
         if (UserStatusEnum.DISABLE.getStatus().equals(userInfo.getStatus())) {
             throw new BusinessException("账号被禁用");
+        }
+
+        if (passwordManager.needsUpgrade(userInfo.getPassword())) {
+            UserInfo passwordUpgrade = new UserInfo();
+            passwordUpgrade.setPassword(passwordManager.encode(password));
+            userInfoMapper.updateByUserId(passwordUpgrade, userInfo.getUserId());
         }
 
         //查询联系人
@@ -174,7 +192,8 @@ public class UserInfoServiceImpl implements UserInfoService {
         }
 
         //保存登录信息到redis
-        String token = StringTools.encodeMD5(tokenUserInfoDto.getUserId() + StringTools.getRandomString(Constants.LENGTH_20));
+        redisComponent.cleanUserTokenByUserId(userInfo.getUserId());
+        String token = secureTokenGenerator.generate();
         tokenUserInfoDto.setToken(token);
         redisComponent.saveTokenUserInfoDto(tokenUserInfoDto);
 
@@ -184,6 +203,13 @@ public class UserInfoServiceImpl implements UserInfoService {
         userInfoVO.setAdmin(tokenUserInfoDto.getAdmin());
 
         return userInfoVO;
+    }
+
+    @Override
+    public void updatePassword(String userId, String password) {
+        UserInfo userInfo = new UserInfo();
+        userInfo.setPassword(passwordManager.encode(password));
+        userInfoMapper.updateByUserId(userInfo, userId);
     }
 
     private TokenUserInfoDto getTokenUserInfoDto(UserInfo userInfo) {
@@ -205,14 +231,20 @@ public class UserInfoServiceImpl implements UserInfoService {
     @Transactional(rollbackFor = Exception.class)
     public void updateUserInfo(UserInfo userInfo, MultipartFile avatarFile, MultipartFile avatarCover) throws IOException {
         if (avatarFile != null) {
-            String baseFolder = appconfig.getProjectFolder() + Constants.FILE_FOLDER_FILE;
-            File targetFileFolder = new File(baseFolder + Constants.FILE_FOLDER_AVATAR_NAME);
-            if (!targetFileFolder.exists()) {
-                targetFileFolder.mkdirs();
+            Path avatarFolder = new File(
+                    appconfig.getProjectFolderPath().toString()
+                            + Constants.FILE_FOLDER_FILE
+                            + Constants.FILE_FOLDER_AVATAR_NAME
+            ).toPath().toAbsolutePath().normalize();
+            Files.createDirectories(avatarFolder);
+            Path avatarPath = avatarFolder.resolve(userInfo.getUserId() + Constants.IMAGE_SUFFIX);
+            avatarFile.transferTo(avatarPath.toFile());
+            Path coverPath = avatarFolder.resolve(userInfo.getUserId() + Constants.IMAGE_SUFFIX + Constants.COVER_IMAGES_SUFFIX);
+            if (avatarCover == null || avatarCover.isEmpty()) {
+                Files.copy(avatarPath, coverPath, StandardCopyOption.REPLACE_EXISTING);
+            } else {
+                avatarCover.transferTo(coverPath.toFile());
             }
-            String filePath = targetFileFolder.getPath() + "/" + userInfo.getUserId() + Constants.IMAGE_SUFFIX;
-            avatarFile.transferTo(new File(filePath));
-            avatarCover.transferTo(new File(filePath + Constants.COVER_IMAGES_SUFFIX));
         }
         UserInfo dbInfo = this.userInfoMapper.selectByUserId(userInfo.getUserId());
         this.userInfoMapper.updateByUserId(userInfo, userInfo.getUserId());

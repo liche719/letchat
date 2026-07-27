@@ -31,6 +31,8 @@ public interface ChatMessageService {
      */
     PaginationResultVO<ChatMessage> findListByPage(ChatMessageQuery param);
 
+    PaginationResultVO<ChatMessage> loadChatMessages(String userId, String contactId, Integer pageNo);
+
     MessageSendDto saveMessage(ChatMessage chatMessage);
 
     void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile coverFile);

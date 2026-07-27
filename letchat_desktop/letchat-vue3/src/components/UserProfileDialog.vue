@@ -2,7 +2,9 @@
   <el-dialog v-model="visible" title="个人资料" width="520px">
     <el-form ref="formRef" :model="form" :rules="rules" label-position="top" class="profile-form">
       <div class="profile-head">
-        <div class="lc-avatar profile-avatar">{{ (form.nickName || 'LC').slice(0, 2).toUpperCase() }}</div>
+        <div class="lc-avatar profile-avatar">
+          {{ (form.nickName || 'LC').slice(0, 2).toUpperCase() }}
+        </div>
         <div>
           <strong>{{ form.nickName || 'LetChat 用户' }}</strong>
           <span>{{ userStore.userInfo?.userId }}</span>
@@ -26,7 +28,14 @@
       </el-form-item>
 
       <el-form-item label="个性签名">
-        <el-input v-model="form.personalSignature" type="textarea" :rows="3" maxlength="100" show-word-limit placeholder="写一句朋友能看到的话" />
+        <el-input
+          v-model="form.personalSignature"
+          type="textarea"
+          :rows="3"
+          maxlength="100"
+          show-word-limit
+          placeholder="写一句朋友能看到的话"
+        />
       </el-form-item>
 
       <el-form-item label="加好友方式">
@@ -113,7 +122,7 @@ watch(visible, (open) => {
 
 <style scoped>
 .profile-form {
-  padding-top: 4px;
+  padding-top: 2px;
 }
 
 .profile-head {
@@ -122,16 +131,16 @@ watch(visible, (open) => {
   gap: 14px;
   margin-bottom: 20px;
   padding: 14px;
-  border: 1px solid var(--lc-line);
-  border-radius: 16px;
+  border: 1px solid var(--lc-line-strong);
+  border-left: 2px solid var(--lc-accent);
+  border-radius: 14px;
   background: var(--lc-panel);
 }
 
 .profile-avatar {
-  width: 58px;
-  height: 58px;
-  border-radius: 18px;
-  font-size: 18px;
+  width: 56px;
+  height: 56px;
+  font-size: 17px;
 }
 
 .profile-head strong,
@@ -140,12 +149,14 @@ watch(visible, (open) => {
 }
 
 .profile-head strong {
+  color: var(--lc-text);
   font-size: 18px;
-  font-weight: 900;
+  font-weight: 600;
 }
 
 .profile-head span {
   margin-top: 4px;
   color: var(--lc-muted);
+  font-size: 12px;
 }
 </style>

@@ -20,7 +20,10 @@ import {
 } from 'element-plus'
 
 import App from './App.vue'
+import { initializeTheme } from './composables/useTheme'
 import router from './router'
+
+initializeTheme()
 
 const app = createApp(App)
 

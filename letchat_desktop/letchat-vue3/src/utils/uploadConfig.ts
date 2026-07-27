@@ -5,6 +5,11 @@
 
 import { computed } from 'vue'
 
+interface AdditionalUploadData {
+  headers?: Record<string, string>
+  data?: Record<string, unknown>
+}
+
 /**
  * 获取上传请求头配置
  */
@@ -28,7 +33,7 @@ export const getUploadConfig = () => {
 /**
  * 构建带token的完整请求配置
  */
-export const buildUploadOptions = (additionalData: Record<string, any> = {}) => {
+export const buildUploadOptions = (additionalData: AdditionalUploadData = {}) => {
   return {
     headers: {
       token: localStorage.getItem('token') || '',

@@ -83,6 +83,20 @@ export interface GroupInfo {
   memberCount?: number
 }
 
+export interface GroupMember {
+  userId: string
+  contactId?: string
+  contactName?: string
+  sex?: number
+  status?: number
+  createTime?: string
+}
+
+export interface GroupInfoDetail {
+  groupInfo: GroupInfo
+  userContactList: GroupMember[]
+}
+
 export interface SearchResult {
   contactId: string
   contactType: ContactKind | 'USER' | 'GROUP' | string

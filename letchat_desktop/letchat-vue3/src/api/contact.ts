@@ -4,6 +4,7 @@ import type {
   BackendContact,
   FriendApply,
   GroupInfo,
+  GroupInfoDetail,
   PaginationResult,
   SearchResult,
   UserInfo,
@@ -70,8 +71,32 @@ export const contactApi = {
     })
   },
 
+  getGroupInfo4chat(groupId: string) {
+    return request.post<unknown, ApiResponse<GroupInfoDetail>>('/group/getGroupInfo4chat', null, {
+      params: { groupId },
+    })
+  },
+
+  saveGroup(formData: FormData) {
+    return request.post<unknown, ApiResponse<null>>('/group/saveGroup', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+  },
+
+  addOrRemoveGroupUser(groupId: string, selectContacts: string[], opType: 0 | 1) {
+    return request.post<unknown, ApiResponse<null>>('/group/addOrRemoveGroupUser', null, {
+      params: { groupId, selectContacts: selectContacts.join(','), opType },
+    })
+  },
+
   leaveGroup(groupId: string) {
     return request.post<unknown, ApiResponse<null>>('/group/leaveGroup', null, {
+      params: { groupId },
+    })
+  },
+
+  dissolutionGroup(groupId: string) {
+    return request.post<unknown, ApiResponse<null>>('/group/dissolutionGroup', null, {
       params: { groupId },
     })
   },

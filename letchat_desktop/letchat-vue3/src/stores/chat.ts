@@ -47,6 +47,9 @@ export const useChatStore = defineStore('chat', () => {
   const messages = ref<ChatMessage[]>([])
   const loadingContacts = ref(false)
   const loadingMessages = ref(false)
+  const loadingOlderMessages = ref(false)
+  const hasMoreMessages = ref(false)
+  const currentMessagePage = ref(1)
   const sending = ref(false)
   const pendingApplyCount = ref(0)
   const keyword = ref('')
@@ -173,10 +176,13 @@ export const useChatStore = defineStore('chat', () => {
     loadingContacts.value = true
     try {
       const [friends, groups] = await Promise.all([contactApi.loadContact('U'), contactApi.loadContact('G')])
-      const unreadMap = new Map(contacts.value.map((item) => [item.contactId, item.unreadCount || 0]))
+      const previousContacts = new Map(contacts.value.map((item) => [item.contactId, item]))
       contacts.value = [...(friends.data || []), ...(groups.data || [])].map((raw) => {
         const contact = normalizeContact(raw)
-        contact.unreadCount = unreadMap.get(contact.contactId) || 0
+        const previous = previousContacts.get(contact.contactId)
+        contact.lastMessage = contact.lastMessage || previous?.lastMessage || ''
+        contact.lastReceiveTime = contact.lastReceiveTime || previous?.lastReceiveTime
+        contact.unreadCount = previous?.unreadCount || 0
         return contact
       })
       sortContacts()
@@ -191,10 +197,26 @@ export const useChatStore = defineStore('chat', () => {
       const response = await chatApi.loadChatMessage(contactId, pageNo)
       const list = (response.data?.list || []).map((item) => normalizeMessage(item, 'received'))
       list.sort((a, b) => a.sendTime - b.sendTime)
-      messages.value = pageNo === 1 ? list : [...list, ...messages.value]
+      const merged = pageNo === 1 ? list : [...list, ...messages.value]
+      messages.value = Array.from(new Map(merged.map((item) => [item.messageId, item])).values())
+      currentMessagePage.value = pageNo
+      hasMoreMessages.value = pageNo < (response.data?.pageTotal || pageNo)
+      if (pageNo === 1 && list.length > 0) {
+        updateContactSummary(list[list.length - 1], false)
+      }
       return list
     } finally {
       loadingMessages.value = false
+    }
+  }
+
+  async function loadOlderMessages() {
+    if (!currentContact.value || loadingMessages.value || loadingOlderMessages.value || !hasMoreMessages.value) return []
+    loadingOlderMessages.value = true
+    try {
+      return await loadMessages(currentContact.value.contactId, currentMessagePage.value + 1)
+    } finally {
+      loadingOlderMessages.value = false
     }
   }
 
@@ -207,6 +229,8 @@ export const useChatStore = defineStore('chat', () => {
   function clearCurrentContact() {
     currentContact.value = null
     messages.value = []
+    currentMessagePage.value = 1
+    hasMoreMessages.value = false
   }
 
   async function sendMessage(content: string) {
@@ -341,6 +365,8 @@ export const useChatStore = defineStore('chat', () => {
     messages,
     loadingContacts,
     loadingMessages,
+    loadingOlderMessages,
+    hasMoreMessages,
     sending,
     pendingApplyCount,
     keyword,
@@ -350,6 +376,7 @@ export const useChatStore = defineStore('chat', () => {
     avatarSeed,
     loadContacts,
     loadMessages,
+    loadOlderMessages,
     setCurrentContact,
     clearCurrentContact,
     sendMessage,

@@ -19,11 +19,15 @@
           <span class="time">{{ formatTime(contact.lastReceiveTime) }}</span>
         </div>
         <div class="subline">
-          <span class="last">{{ contact.lastMessage || (contact.contactType === 'G' ? '群聊暂无消息' : '好友暂无消息') }}</span>
+          <span class="last">{{
+            contact.lastMessage || (contact.contactType === 'G' ? '群聊暂无消息' : '好友暂无消息')
+          }}</span>
         </div>
       </div>
 
-      <span v-if="contact.unreadCount" class="unread">{{ contact.unreadCount > 99 ? '99+' : contact.unreadCount }}</span>
+      <span v-if="contact.unreadCount" class="unread">{{
+        contact.unreadCount > 99 ? '99+' : contact.unreadCount
+      }}</span>
     </button>
 
     <div v-if="contacts.length === 0" class="empty">
@@ -71,53 +75,59 @@ function formatTime(value?: string | number) {
 <style scoped>
 .contact-list {
   min-height: 0;
+  padding: 0 8px 12px;
   overflow-y: auto;
-  padding: 6px 8px 12px;
 }
 
 .contact-row {
   position: relative;
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);
-  gap: 10px;
+  gap: 11px;
   width: 100%;
-  padding: 9px 10px;
-  border: 1px solid transparent;
-  border-radius: 12px;
+  padding: 11px 9px;
+  border: 0;
+  border-bottom: 1px solid var(--lc-line);
+  border-left: 2px solid transparent;
   color: var(--lc-text);
   background: transparent;
   cursor: pointer;
   text-align: left;
   transition:
-    background 0.16s ease,
-    border-color 0.16s ease,
-    transform 0.16s ease;
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
 }
 
 .contact-row:hover {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--lc-panel);
+}
+
+.contact-row:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: -2px;
 }
 
 .contact-row.active {
-  border-color: rgba(13, 124, 105, 0.2);
-  background: #ffffff;
-  box-shadow: 0 8px 22px rgba(22, 35, 31, 0.07);
+  border-left-color: var(--lc-accent);
+  background: var(--lc-accent-soft);
 }
 
 .avatar {
   width: 40px;
   height: 40px;
-  border-radius: 12px;
-  font-size: 12px;
+  font-size: 11px;
 }
 
 .avatar :deep(svg) {
-  width: 17px;
-  height: 17px;
+  width: 16px;
+  height: 16px;
 }
 
 .avatar.group {
-  background: linear-gradient(145deg, #33444d, #0d7c69);
+  border-color: var(--lc-brass);
+  background: var(--lc-brass);
+  box-shadow: 0 0 0 3px var(--lc-brass-soft);
 }
 
 .main {
@@ -142,13 +152,14 @@ function formatTime(value?: string | number) {
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
-  font-weight: 780;
+  font-weight: 600;
 }
 
 .time {
   flex: 0 0 auto;
   color: var(--lc-soft);
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .subline {
@@ -159,6 +170,7 @@ function formatTime(value?: string | number) {
 
 .last {
   min-width: 0;
+  padding-right: 26px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -167,53 +179,67 @@ function formatTime(value?: string | number) {
 .unread {
   position: absolute;
   right: 9px;
-  bottom: 8px;
+  bottom: 11px;
+  display: grid;
+  place-items: center;
   min-width: 17px;
   height: 17px;
-  padding: 0 5px;
-  border-radius: 999px;
-  color: #ffffff;
+  padding: 0 4px;
+  border: 2px solid var(--lc-surface);
+  border-radius: 50%;
+  color: #fff7ec;
+  background: var(--lc-coral);
   font-size: 10px;
-  font-weight: 800;
-  text-align: center;
-  line-height: 17px;
-  background: var(--lc-danger);
+  font-weight: 700;
+  line-height: 13px;
 }
 
 .empty {
   display: grid;
   place-items: center;
-  gap: 8px;
-  padding: 42px 22px;
+  align-content: center;
+  gap: 9px;
+  min-height: 260px;
+  padding: 34px 22px;
   color: var(--lc-soft);
   text-align: center;
 }
 
 .empty-mark {
+  position: relative;
   display: grid;
   place-items: center;
-  width: 46px;
-  height: 46px;
-  border: 1px solid var(--lc-line);
-  border-radius: 14px;
+  width: 44px;
+  height: 44px;
+  border: 1px solid var(--lc-line-strong);
+  border-radius: 50%;
   color: var(--lc-muted);
-  background: rgba(255, 255, 255, 0.66);
+  background: var(--lc-surface);
+}
+
+.empty-mark::after {
+  position: absolute;
+  inset: -8px;
+  border: 1px dashed var(--lc-line-strong);
+  border-radius: 50%;
+  content: '';
 }
 
 .empty-mark :deep(svg) {
-  width: 21px;
-  height: 21px;
+  width: 18px;
+  height: 18px;
 }
 
 .empty strong {
+  margin-top: 8px;
   color: var(--lc-text);
-  font-size: 13px;
-  font-weight: 800;
+  font-size: 14px;
+  font-weight: 600;
 }
 
 .empty span {
-  max-width: 180px;
+  max-width: 190px;
   font-size: 12px;
-  line-height: 1.55;
+  line-height: 1.6;
 }
 </style>

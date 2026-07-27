@@ -13,6 +13,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 class ChannelContextUtilsConcurrencyTest {
@@ -76,6 +77,31 @@ class ChannelContextUtilsConcurrencyTest {
 
         assertEquals(1, contextUtils.getOnlineUserCount());
         assertEquals("U1001", ChannelContextUtils.getUserId(second));
+        first.close();
+        second.close();
+        eventLoop.shutdownGracefully();
+    }
+
+    @Test
+    void dissolvingGroupDoesNotCloseMemberConnections() {
+        ChannelContextUtils contextUtils = new ChannelContextUtils();
+        DefaultEventLoop eventLoop = new DefaultEventLoop();
+        LocalChannel first = new LocalChannel();
+        LocalChannel second = new LocalChannel();
+        eventLoop.register(first).syncUninterruptibly();
+        eventLoop.register(second).syncUninterruptibly();
+
+        contextUtils.bindUserChannel("U1001", first);
+        contextUtils.bindUserChannel("U1002", second);
+        contextUtils.addUser2Group("U1001", "G1001");
+        contextUtils.addUser2Group("U1002", "G1001");
+
+        contextUtils.removeGroup("G1001");
+
+        assertEquals(0, contextUtils.getGroupConnectionCount("G1001"));
+        assertTrue(first.isOpen());
+        assertTrue(second.isOpen());
+        assertFalse(first.closeFuture().isDone());
         first.close();
         second.close();
         eventLoop.shutdownGracefully();

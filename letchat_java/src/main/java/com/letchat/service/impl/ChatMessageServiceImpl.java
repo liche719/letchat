@@ -26,6 +26,7 @@ import com.letchat.redis.RedisComponent;
 import com.letchat.service.ChatMessageService;
 import com.letchat.utils.CopyTools;
 import com.letchat.utils.DateUtil;
+import com.letchat.utils.MessageIdGenerator;
 import com.letchat.utils.StringTools;
 import com.letchat.websocket.MessageHandler;
 import lombok.extern.slf4j.Slf4j;
@@ -34,13 +35,17 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.data.redis.core.ReactiveRedisOperations;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.web.multipart.MultipartFile;
 
 import javax.annotation.Resource;
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Date;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 
 /**
@@ -71,6 +76,15 @@ public class ChatMessageServiceImpl implements ChatMessageService {
     @Resource
     private KimiAIService kimiAIService;
 
+    @Resource
+    private MessageIdGenerator messageIdGenerator;
+
+    @Value("${letchat.message-upload.metadata-wait-timeout-ms:3000}")
+    private long messageMetadataWaitTimeoutMs;
+
+    @Value("${letchat.message-upload.metadata-poll-interval-ms:50}")
+    private long messageMetadataPollIntervalMs;
+
     /**
      * 根据条件查询列表
      */
@@ -100,6 +114,33 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         List<ChatMessage> list = this.findListByParam(param);
         PaginationResultVO<ChatMessage> result = new PaginationResultVO(count, page.getPageSize(), page.getPageNo(), page.getPageTotal(), list);
         return result;
+    }
+
+    @Override
+    public PaginationResultVO<ChatMessage> loadChatMessages(String userId, String contactId, Integer pageNo) {
+        UserContactTypeEnum contactType = UserContactTypeEnum.getByPrefix(contactId);
+        if (contactType == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
+        List<String> contactIds = redisComponent.getUserContactList(userId);
+        if (contactIds == null || !contactIds.contains(contactId)) {
+            throw new BusinessException(
+                    UserContactTypeEnum.USER == contactType
+                            ? ResponseCodeEnum.CODE_902
+                            : ResponseCodeEnum.CODE_903
+            );
+        }
+
+        String sessionId = UserContactTypeEnum.USER == contactType
+                ? StringTools.getChatSessionId4User(new String[]{userId, contactId})
+                : StringTools.getChatSessionId4Group(contactId);
+        ChatMessageQuery query = new ChatMessageQuery();
+        query.setSessionId(sessionId);
+        query.setPageNo(pageNo == null ? 1 : pageNo);
+        query.setPageSize(PageSize.SIZE20.getSize());
+        query.setOrderBy("send_time desc");
+        return findListByPage(query);
     }
 
     @Override
@@ -152,6 +193,9 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         //记录消息表
         chatMessage.setSendUserId(sendUserId);
         chatMessage.setContactType(userContactTypeEnum.getType());
+        if (chatMessage.getMessageId() == null) {
+            chatMessage.setMessageId(messageIdGenerator.nextId());
+        }
 
         // 发送MQ，异步保存消息
         chatMessageProducer.saveChatMessage(chatMessage);
@@ -185,10 +229,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
 
     @Override
     public void saveMessageFile(String userId, Long messageId, MultipartFile file, MultipartFile coverFile) {
-        ChatMessage chatMessage = chatMessageMapper.selectByMessageId(messageId);
-        if (chatMessage == null) {
-            throw new BusinessException(ResponseCodeEnum.CODE_600);
-        }
+        ChatMessage chatMessage = waitForPersistedMessage(messageId);
         if (!userId.equals(chatMessage.getSendUserId())) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
@@ -206,14 +247,14 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         String fileExName = StringTools.getFileSuffix(fileName);
         String fileRealName = messageId + fileExName;
         String month = DateUtil.format(new Date(chatMessage.getSendTime()), DateTimePatternEnum.YYYYMM.getPattern());
-        File folder = new File(appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE + month);
-        if (!folder.exists()) {
-            folder.mkdirs();
-        }
-        File uploadFile = new File(folder.getPath() + "/" + fileRealName);
+        Path folder = new File(appConfig.getProjectFolderPath().toString() + Constants.FILE_FOLDER_FILE + month)
+                .toPath()
+                .toAbsolutePath()
+                .normalize();
         try {
-            file.transferTo(uploadFile);
-            coverFile.transferTo(new File(folder.getPath() + "/" + messageId + Constants.COVER_IMAGES_SUFFIX + fileExName));
+            Files.createDirectories(folder);
+            file.transferTo(folder.resolve(fileRealName).toFile());
+            coverFile.transferTo(folder.resolve(messageId + Constants.COVER_IMAGES_SUFFIX + fileExName).toFile());
         } catch (IOException e) {
             log.error("上传文件失败", e);
             throw new BusinessException("上传文件失败");
@@ -236,13 +277,41 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         messageHandler.sendMessage(messageSendDto);
     }
 
+    private ChatMessage waitForPersistedMessage(Long messageId) {
+        long timeoutMs = Math.max(0, messageMetadataWaitTimeoutMs);
+        long pollIntervalMs = Math.max(1, messageMetadataPollIntervalMs);
+        long deadline = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(timeoutMs);
+        ChatMessage chatMessage;
+        do {
+            chatMessage = chatMessageMapper.selectByMessageId(messageId);
+            if (chatMessage != null) {
+                return chatMessage;
+            }
+            if (System.nanoTime() >= deadline) {
+                break;
+            }
+            try {
+                TimeUnit.MILLISECONDS.sleep(pollIntervalMs);
+            } catch (InterruptedException exception) {
+                Thread.currentThread().interrupt();
+                throw new BusinessException(ResponseCodeEnum.CODE_600);
+            }
+        } while (true);
+        throw new BusinessException(ResponseCodeEnum.CODE_600);
+    }
+
     @Override
     public File downloadFile(TokenUserInfoDto userInfoDto, Long messageId, Boolean showCover) {
         ChatMessage message = chatMessageMapper.selectByMessageId(messageId);
+        if (message == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_602);
+        }
         String contactId = message.getContactId();
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(contactId);
 
-        if (UserContactTypeEnum.USER == contactTypeEnum && !userInfoDto.getUserId().equals(message.getContactId())) {
+        if (UserContactTypeEnum.USER == contactTypeEnum
+                && !userInfoDto.getUserId().equals(message.getSendUserId())
+                && !userInfoDto.getUserId().equals(message.getContactId())) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
 
@@ -258,8 +327,12 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             }
         }
 
+        if (contactTypeEnum == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+
         String month = DateUtil.format(new Date(message.getSendTime()), DateTimePatternEnum.YYYYMM.getPattern());
-        File folder = new File(appConfig.getProjectFolder() + Constants.FILE_FOLDER_FILE + month);
+        File folder = new File(appConfig.getProjectFolderPath().toString() + Constants.FILE_FOLDER_FILE + month);
         if (!folder.exists()) {
             folder.mkdirs();
         }

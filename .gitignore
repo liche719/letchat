@@ -31,4 +31,4 @@ letchat_java/src/main/resources/application-*.yaml
 !letchat_java/src/main/resources/application.example.yaml
 
 # Runtime uploads and generated user files
-/files/
+/letchat_java/files/

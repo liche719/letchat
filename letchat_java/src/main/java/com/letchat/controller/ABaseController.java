@@ -5,6 +5,7 @@ import com.letchat.entity.dto.TokenUserInfoDto;
 import com.letchat.entity.enums.ResponseCodeEnum;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
+import com.letchat.utils.StringTools;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 
@@ -53,7 +54,13 @@ public class ABaseController {
 
     protected TokenUserInfoDto getTokenUserInfo(HttpServletRequest request) {
         String token = request.getHeader("token");
+        if (StringTools.isEmpty(token)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_901);
+        }
         TokenUserInfoDto tokenUserInfoDto = (TokenUserInfoDto) redisTemplate.opsForValue().get(Constants.REDIS_KEY_WS_TOKEN + token);
+        if (tokenUserInfoDto == null) {
+            throw new BusinessException(ResponseCodeEnum.CODE_901);
+        }
         return tokenUserInfoDto;
     }
 }

@@ -1,12 +1,10 @@
 package com.letchat.websocket.netty;
 
-import io.netty.channel.Channel;
+import com.letchat.websocket.ChannelContextUtils;
 import io.netty.channel.ChannelDuplexHandler;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.handler.timeout.IdleState;
 import io.netty.handler.timeout.IdleStateEvent;
-import io.netty.util.Attribute;
-import io.netty.util.AttributeKey;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
@@ -16,15 +14,12 @@ public class HandlerHeartBeat extends ChannelDuplexHandler {
         if (evt instanceof IdleStateEvent) {
             IdleStateEvent e = (IdleStateEvent) evt;
             if (e.state() == IdleState.READER_IDLE) {
-                Channel channel = ctx.channel();
-                Attribute<String> attribute = channel.attr(AttributeKey.valueOf(channel.id().toString()));
-                String userId = attribute.get();
-                log.info("用户 {} 心跳超时", userId);
+                String userId = ChannelContextUtils.getUserId(ctx.channel());
+                log.warn("WebSocket heartbeat timed out, userId={}", userId);
                 ctx.close();
-            } else if (e.state() == IdleState.WRITER_IDLE) {
-                ctx.writeAndFlush("heart");
+                return;
             }
         }
-
+        super.userEventTriggered(ctx, evt);
     }
 }

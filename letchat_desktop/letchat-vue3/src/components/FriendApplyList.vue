@@ -2,7 +2,9 @@
   <el-dialog v-model="visible" title="好友申请" width="560px" @open="loadList">
     <div v-loading="loading" class="apply-list">
       <div v-for="item in list" :key="item.applyId" class="apply-row">
-        <div class="lc-avatar apply-avatar">{{ (item.contactName || item.applyUserId).slice(0, 2).toUpperCase() }}</div>
+        <div class="lc-avatar apply-avatar">
+          {{ (item.contactName || item.applyUserId).slice(0, 2).toUpperCase() }}
+        </div>
         <div class="apply-main">
           <strong>{{ item.contactName || item.applyUserId }}</strong>
           <span>{{ item.applyInfo || '对方没有填写验证信息' }}</span>
@@ -13,7 +15,9 @@
             <el-button size="small" type="primary" @click="deal(item.applyId, 1)">同意</el-button>
             <el-button size="small" @click="deal(item.applyId, 2)">拒绝</el-button>
           </template>
-          <el-tag v-else :type="statusType(item.status)">{{ item.statusName || statusText(item.status) }}</el-tag>
+          <el-tag v-else :type="statusType(item.status)">{{
+            item.statusName || statusText(item.status)
+          }}</el-tag>
         </div>
       </div>
 
@@ -71,7 +75,12 @@ function statusType(status: number) {
 
 function formatTime(value?: number) {
   if (!value) return ''
-  return new Date(value).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+  return new Date(value).toLocaleString('zh-CN', {
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 watch(visible, (open) => {
@@ -86,10 +95,10 @@ watch(visible, (open) => {
 
 .apply-row {
   display: grid;
-  grid-template-columns: 46px minmax(0, 1fr) auto;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 14px 0;
+  padding: 14px 4px;
   border-bottom: 1px solid var(--lc-line);
 }
 
@@ -98,9 +107,8 @@ watch(visible, (open) => {
 }
 
 .apply-avatar {
-  width: 46px;
-  height: 46px;
-  border-radius: 15px;
+  width: 44px;
+  height: 44px;
 }
 
 .apply-main {
@@ -117,7 +125,8 @@ watch(visible, (open) => {
 }
 
 .apply-main strong {
-  font-weight: 900;
+  color: var(--lc-text);
+  font-weight: 600;
 }
 
 .apply-main span {
@@ -126,12 +135,25 @@ watch(visible, (open) => {
 }
 
 .apply-main small {
-  margin-top: 3px;
+  margin-top: 4px;
   color: var(--lc-soft);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
 }
 
 .actions {
   display: flex;
-  gap: 8px;
+  gap: 7px;
+}
+
+@media (max-width: 520px) {
+  .apply-row {
+    grid-template-columns: 42px minmax(0, 1fr);
+  }
+
+  .actions {
+    grid-column: 2;
+    justify-content: flex-start;
+  }
 }
 </style>

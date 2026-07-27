@@ -88,7 +88,7 @@ export const useUserStore = defineStore('user', () => {
     const maxAttempts = 8
     if (reconnectAttempts >= maxAttempts) {
       socketStatus.value = 'closed'
-      ElMessage.warning('WebSocket 重连失败，请重新登录')
+      ElMessage.warning('连接已断开，请重新登录')
       clearSession()
       return
     }
@@ -162,7 +162,6 @@ export const useUserStore = defineStore('user', () => {
       throw new Error('登录响应缺少 token')
     }
     persistSession(user.token, user)
-    connectSocket()
     return user
   }
 
@@ -196,10 +195,6 @@ export const useUserStore = defineStore('user', () => {
   async function getCheckCode() {
     const response = await authApi.getCheckCode()
     return response.data
-  }
-
-  if (token.value) {
-    connectSocket()
   }
 
   return {

@@ -28,6 +28,7 @@ import io.netty.handler.codec.http.websocketx.TextWebSocketFrame;
 import io.netty.util.Attribute;
 import io.netty.util.AttributeKey;
 import io.netty.util.concurrent.GlobalEventExecutor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import javax.annotation.Resource;
@@ -37,6 +38,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @Component
+@Slf4j
 public class ChannelContextUtils {
 
     private static final ConcurrentHashMap<String, Channel> USER_CONTEXT_MAP = new ConcurrentHashMap<>();
@@ -66,7 +68,7 @@ public class ChannelContextUtils {
         bindUserChannel(userId, channel);
 
         List<String> contactIdList = redisComponent.getUserContactList(userId);
-        System.out.println("用户" + userId + "的群组：" + contactIdList);
+        log.debug("Binding WebSocket groups, userId={}, contacts={}", userId, contactIdList);
         for (String groupId : contactIdList) {
             if (groupId.startsWith(UserContactTypeEnum.GROUP.getPrefix())) {
                 add2Group(groupId, channel);
@@ -160,6 +162,10 @@ public class ChannelContextUtils {
 
     public void sendMessage(MessageSendDto messageSendDto) {
         UserContactTypeEnum contactTypeEnum = UserContactTypeEnum.getByPrefix(messageSendDto.getContactId());
+        if (contactTypeEnum == null) {
+            log.warn("Ignoring message with invalid contactId={}", messageSendDto.getContactId());
+            return;
+        }
         switch (contactTypeEnum) {
             case USER:
                 send2User(messageSendDto);
@@ -237,9 +243,8 @@ public class ChannelContextUtils {
             }
             channelGroup.remove(channel);
         }
-        if(MessageTypeEnum.DISSOLUTION_GROUP == messageTypeEnum){
-            GROUP_CONTEXT_MAP.remove(messageSendDto.getContactId());
-            channelGroup.close();
+        if (MessageTypeEnum.DISSOLUTION_GROUP == messageTypeEnum) {
+            removeGroup(messageSendDto.getContactId());
         }
     }
 
@@ -278,6 +283,13 @@ public class ChannelContextUtils {
 
     int getOnlineUserCount() {
         return USER_CONTEXT_MAP.size();
+    }
+
+    void removeGroup(String groupId) {
+        ChannelGroup group = GROUP_CONTEXT_MAP.remove(groupId);
+        if (group != null) {
+            group.clear();
+        }
     }
 
     public static String getUserId(Channel channel) {

@@ -59,8 +59,6 @@ public class GroupInfoController extends ABaseController {
                                 MultipartFile avatarCover) throws IOException {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
 
-        System.out.println(avatarFile);
-
         GroupInfo groupInfo = new GroupInfo();
         groupInfo.setGroupOwnerId(tokenUserInfoDto.getUserId());
         groupInfo.setGroupId(groupId);

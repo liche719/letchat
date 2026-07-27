@@ -1,23 +1,21 @@
 package com.letchat.controller;
 
+import com.letchat.annotation.GlobalInterception;
 import com.letchat.config.AppConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.dto.TokenUserInfoDto;
 import com.letchat.entity.enums.MessageTypeEnum;
-import com.letchat.entity.enums.PageSize;
 import com.letchat.entity.enums.ResponseCodeEnum;
-import com.letchat.entity.enums.UserContactTypeEnum;
 import com.letchat.entity.po.ChatMessage;
-import com.letchat.entity.query.ChatMessageQuery;
 import com.letchat.entity.vo.PaginationResultVO;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
-import com.letchat.redis.RedisComponent;
-import com.letchat.service.impl.ChatMessageServiceImpl;
+import com.letchat.service.ChatMessageService;
 import com.letchat.utils.StringTools;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -25,35 +23,35 @@ import org.springframework.web.multipart.MultipartFile;
 import javax.annotation.Resource;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
-import javax.validation.constraints.Max;
 import javax.validation.constraints.NotEmpty;
 import javax.validation.constraints.NotNull;
+import javax.validation.constraints.Size;
 import java.io.File;
 import java.io.FileInputStream;
+import java.io.IOException;
 import java.io.OutputStream;
-import java.util.List;
+import java.nio.file.Path;
 
 @RestController("chatController")
 @RequestMapping("/chat")
 @Slf4j
+@Validated
 public class ChatController extends ABaseController {
 
     @Resource
     private AppConfig appConfig;
 
     @Resource
-    private ChatMessageServiceImpl chatMessageService;
-
-    @Resource
-    private RedisComponent redisComponent;
+    private ChatMessageService chatMessageService;
 
     /**
      * 发送消息 TODO 使用RabbitMQ
      */
     @RequestMapping("/sendMessage")
+    @GlobalInterception
     public ResponseVO sendMessage(HttpServletRequest request,
                                   @NotEmpty String contactId,
-                                  @NotEmpty @Max(500) String messageContent,
+                                  @NotEmpty @Size(max = 500) String messageContent,
                                   @NotNull Integer messageType,
                                   Long fileSize,
                                   String fileName,
@@ -90,6 +88,7 @@ public class ChatController extends ABaseController {
      * @return
      */
     @RequestMapping("/uploadFile")
+    @GlobalInterception
     public ResponseVO uploadFile(HttpServletRequest request,
                                  @NotNull Long messageId,
                                  @NotNull MultipartFile file,
@@ -108,59 +107,16 @@ public class ChatController extends ABaseController {
      * @return
      */
     @RequestMapping("/loadChatMessage")
+    @GlobalInterception
     public ResponseVO loadChatMessage(HttpServletRequest request,
                                       @NotEmpty String contactId,
                                       Integer pageNo) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-
-        // 验证联系人权限
-        List<String> contactIdList = redisComponent.getUserContactList(tokenUserInfoDto.getUserId());
-        if (!contactIdList.contains(contactId)) {
-            UserContactTypeEnum userContactStatusEnum = UserContactTypeEnum.getByPrefix(contactId);
-            if (UserContactTypeEnum.USER == userContactStatusEnum) {
-                throw new BusinessException(ResponseCodeEnum.CODE_902);
-            } else {
-                throw new BusinessException(ResponseCodeEnum.CODE_903);
-            }
-        }
-
-        // 查询聊天记录（前端有数据库存之前的聊天记录）
-//        ChatMessageQuery query = new ChatMessageQuery();
-//        query.setContactId(contactId);
-//        query.setPageNo(pageNo != null ? pageNo : 1);
-//        query.setPageSize(PageSize.SIZE20.getSize());
-//        query.setOrderBy("send_time desc");
-//
-//        PaginationResultVO<ChatMessage> result = chatMessageService.findListByPage(query);
-
-
-        // 查询聊天记录
-        PaginationResultVO<ChatMessage> result = null;
-        if (UserContactTypeEnum.USER == UserContactTypeEnum.getByPrefix(contactId)) {
-            // 私聊
-            ChatMessageQuery query1 = new ChatMessageQuery();
-            query1.setContactId(contactId);
-            query1.setSendUserId(tokenUserInfoDto.getUserId());
-            List<ChatMessage> list1 = chatMessageService.findListByParam(query1);
-
-            ChatMessageQuery query2 = new ChatMessageQuery();
-            query2.setContactId(tokenUserInfoDto.getUserId());
-            query2.setSendUserId(contactId);
-            List<ChatMessage> list2 = chatMessageService.findListByParam(query2);
-            list1.addAll(list2);
-            // 按sendTime时间戳排序
-            list1.sort((o1, o2) -> o2.getSendTime().compareTo(o1.getSendTime()));
-            result = new PaginationResultVO<>(list1.size() + list2.size(), PageSize.SIZE20.getSize(), pageNo, 20, list1);
-        } else {
-            // 群聊
-            ChatMessageQuery query = new ChatMessageQuery();
-            query.setContactId(contactId);
-            query.setPageNo(pageNo != null ? pageNo : 1);
-            query.setPageSize(PageSize.SIZE20.getSize());
-            query.setOrderBy("send_time desc");
-            result = chatMessageService.findListByPage(query);
-        }
-
+        PaginationResultVO<ChatMessage> result = chatMessageService.loadChatMessages(
+                tokenUserInfoDto.getUserId(),
+                contactId,
+                pageNo
+        );
         return getSuccessResponseVO(result);
     }
 
@@ -176,56 +132,49 @@ public class ChatController extends ABaseController {
     public void downloadFile(HttpServletRequest request,
                              HttpServletResponse response,
                              @NotEmpty String fileId,
-                             @NotEmpty Boolean showCover) {
-        TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-        OutputStream out = null;
-        FileInputStream in = null;
-        try {
-            File file = null;
-            if (!StringTools.isNumber(fileId)) {
-                String avatarFolderName = Constants.FILE_FOLDER_FILE + Constants.FILE_FOLDER_AVATAR_NAME;
-                String avatarPath = appConfig.getProjectFolder() + avatarFolderName + fileId + Constants.IMAGE_SUFFIX;
-                if (showCover) {
-                    avatarPath = avatarPath + Constants.COVER_IMAGES_SUFFIX;
-                }
-                file = new File(avatarPath);
-                if (!file.exists()) {
-                    throw new BusinessException(ResponseCodeEnum.CODE_602);
-                }
-            } else {
-                file = chatMessageService.downloadFile(tokenUserInfoDto, Long.parseLong(fileId), showCover);
-            }
+                             @NotNull Boolean showCover) throws IOException {
+        File file;
+        if (StringTools.isNumber(fileId)) {
+            TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
+            file = chatMessageService.downloadFile(tokenUserInfoDto, Long.parseLong(fileId), showCover);
+        } else {
+            file = resolveAvatarFile(fileId, showCover);
+        }
 
-            response.setContentType("application/x-msdownload;charset=UTF-8");
-            response.setHeader("Content-Disposition", "attachment;");
-            response.setContentLengthLong(file.length());
-            in = new FileInputStream(file);
+        response.setContentType("application/x-msdownload;charset=UTF-8");
+        response.setHeader("Content-Disposition", "attachment;");
+        response.setContentLengthLong(file.length());
+        try (FileInputStream in = new FileInputStream(file);
+             OutputStream out = response.getOutputStream()) {
             byte[] byteData = new byte[1024];
-            out = response.getOutputStream();
             int len;
             while ((len = in.read(byteData)) != -1) {
                 out.write(byteData, 0, len);
             }
             out.flush();
-        } catch (Exception e) {
-            log.error("下载文件异常", e);
-        } finally {
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (Exception e) {
-                    log.error("IO异常", e);
-                }
-            }
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (Exception e) {
-                    log.error("IO异常", e);
-                }
-            }
         }
     }
 
+    private File resolveAvatarFile(String fileId, boolean showCover) {
+        File avatarFolder = new File(
+                appConfig.getProjectFolderPath().toString()
+                        + Constants.FILE_FOLDER_FILE
+                        + Constants.FILE_FOLDER_AVATAR_NAME
+        );
+        String fileName = fileId + Constants.IMAGE_SUFFIX;
+        if (showCover) {
+            fileName += Constants.COVER_IMAGES_SUFFIX;
+        }
+        Path avatarRoot = avatarFolder.toPath().toAbsolutePath().normalize();
+        Path avatarPath = avatarRoot.resolve(fileName).normalize();
+        if (!avatarPath.startsWith(avatarRoot)) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
+        File avatar = avatarPath.toFile();
+        if (!avatar.isFile()) {
+            throw new BusinessException(ResponseCodeEnum.CODE_602);
+        }
+        return avatar;
+    }
 
 }

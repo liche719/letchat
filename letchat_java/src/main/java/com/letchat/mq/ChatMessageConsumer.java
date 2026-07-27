@@ -13,7 +13,6 @@ import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.rabbit.annotation.RabbitListener;
-import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.amqp.support.AmqpHeaders;
 import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
@@ -34,7 +33,7 @@ public class ChatMessageConsumer {
     private ChatSessionMapper<ChatSession, ChatSessionQuery> chatSessionMapper;
 
     @Resource
-    private RabbitTemplate rabbitTemplate;
+    private ChatMessageProducer<?> chatMessageProducer;
 
     @Resource
     private TransactionTemplate transactionTemplate;
@@ -143,11 +142,7 @@ public class ChatMessageConsumer {
 
         Message retryMessage = retryPolicy.buildRetryMessage(amqpMessage);
         try {
-            rabbitTemplate.send(
-                    RabbitMQConfig.CHAT_MESSAGE_EXCHANGE,
-                    RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY,
-                    retryMessage
-            );
+            chatMessageProducer.republishChatMessage(retryMessage);
             channel.basicAck(deliveryTag, false);
             log.warn("Republished chat message for retry, retryCount={}, payload={}",
                     retryPolicy.getRetryCount(retryMessage),

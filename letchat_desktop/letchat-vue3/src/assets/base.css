@@ -1,36 +1,115 @@
-:root {
-  --lc-bg: #e9ece8;
-  --lc-bg-soft: #f5f6f3;
-  --lc-ink: #101815;
-  --lc-rail: #15211d;
-  --lc-rail-soft: #21312c;
-  --lc-surface: #ffffff;
-  --lc-surface-subtle: #f6f8f5;
-  --lc-panel: #f7f9f6;
-  --lc-panel-strong: #edf2ee;
-  --lc-line: rgba(20, 30, 26, 0.1);
-  --lc-line-strong: rgba(20, 30, 26, 0.18);
-  --lc-text: #14201c;
-  --lc-muted: #65716d;
-  --lc-soft: #98a29d;
-  --lc-accent: #0b7a66;
-  --lc-accent-dark: #055a4c;
-  --lc-accent-soft: rgba(11, 122, 102, 0.11);
-  --lc-amber: #b77a17;
-  --lc-danger: #c55252;
-  --lc-shadow: 0 22px 70px rgba(19, 29, 25, 0.13);
-  --lc-shadow-soft: 0 10px 30px rgba(19, 29, 25, 0.08);
+:root,
+:root[data-theme='day'] {
+  color-scheme: light;
+  --lc-bg: #e7e4d8;
+  --lc-bg-soft: #f2f0e7;
+  --lc-ink: #173129;
+  --lc-rail: #173129;
+  --lc-rail-soft: #24463b;
+  --lc-surface: #fbfaf3;
+  --lc-surface-subtle: #f2f0e7;
+  --lc-panel: #efede3;
+  --lc-panel-strong: #e5e2d6;
+  --lc-line: rgba(23, 49, 41, 0.13);
+  --lc-line-strong: rgba(23, 49, 41, 0.26);
+  --lc-text: #173129;
+  --lc-muted: #66756f;
+  --lc-soft: #8b948f;
+  --lc-accent: #1f7965;
+  --lc-accent-dark: #165c4d;
+  --lc-accent-soft: rgba(31, 121, 101, 0.1);
+  --lc-on-accent: #fbfaf3;
+  --lc-brass: #9c6a24;
+  --lc-brass-soft: rgba(156, 106, 36, 0.1);
+  --lc-mint: #1f7965;
+  --lc-coral: #b65743;
+  --lc-danger: #b65743;
+  --lc-control-bg: rgba(251, 250, 243, 0.82);
+  --lc-control-hover: #fbfaf3;
+  --lc-focus: rgba(31, 121, 101, 0.48);
+  --lc-shadow: 0 22px 60px rgba(23, 49, 41, 0.11);
+  --lc-shadow-soft: 0 10px 30px rgba(23, 49, 41, 0.07);
+  --lc-font-serif: 'MiSans', 'HarmonyOS Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --el-color-primary: #1f7965;
+  --el-color-primary-light-3: #559889;
+  --el-color-primary-light-5: #86b5aa;
+  --el-color-primary-light-7: #b8d3cc;
+  --el-color-primary-light-8: #d4e3de;
+  --el-color-primary-light-9: #eaf1ee;
+  --el-color-primary-dark-2: #165c4d;
+  --el-color-danger: #b65743;
+  --el-bg-color: #fbfaf3;
+  --el-bg-color-overlay: #fbfaf3;
+  --el-fill-color-blank: #fbfaf3;
+  --el-fill-color-light: #f2f0e7;
+  --el-fill-color-lighter: #f6f4ec;
+  --el-fill-color-extra-light: #faf8f1;
+  --el-fill-color-dark: #e5e2d6;
+  --el-border-color: rgba(23, 49, 41, 0.2);
+  --el-border-color-light: rgba(23, 49, 41, 0.14);
+  --el-border-color-lighter: rgba(23, 49, 41, 0.1);
+  --el-text-color-primary: #173129;
+  --el-text-color-regular: #40554d;
+  --el-text-color-secondary: #66756f;
+  --el-text-color-placeholder: #8b948f;
+  --el-mask-color: rgba(23, 49, 41, 0.32);
+  --el-border-radius-base: 10px;
+  --el-font-family: var(--lc-font-serif);
+}
 
-  --el-color-primary: #0b7a66;
-  --el-color-primary-light-3: #3d9889;
-  --el-color-primary-light-5: #78b8ad;
-  --el-color-primary-light-7: #afd7d0;
-  --el-color-primary-light-8: #cde7e2;
-  --el-color-primary-light-9: #e8f5f2;
-  --el-color-primary-dark-2: #055a4c;
-  --el-border-radius-base: 8px;
-  --el-font-family:
-    "HarmonyOS Sans SC", "MiSans", "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+:root[data-theme='night'] {
+  color-scheme: dark;
+  --lc-bg: #0c1511;
+  --lc-bg-soft: #101815;
+  --lc-ink: #ecdfc2;
+  --lc-rail: #0c1712;
+  --lc-rail-soft: #14231c;
+  --lc-surface: #111c17;
+  --lc-surface-subtle: #15231d;
+  --lc-panel: #172720;
+  --lc-panel-strong: #1c2e26;
+  --lc-line: rgba(236, 223, 194, 0.12);
+  --lc-line-strong: rgba(236, 223, 194, 0.24);
+  --lc-text: #ecdfc2;
+  --lc-muted: #95a59e;
+  --lc-soft: #718078;
+  --lc-accent: #87d5ba;
+  --lc-accent-dark: #65b99d;
+  --lc-accent-soft: rgba(135, 213, 186, 0.1);
+  --lc-on-accent: #101815;
+  --lc-brass: #eec87f;
+  --lc-brass-soft: rgba(238, 200, 127, 0.1);
+  --lc-mint: #87d5ba;
+  --lc-coral: #d47c63;
+  --lc-danger: #d47c63;
+  --lc-control-bg: rgba(16, 24, 21, 0.78);
+  --lc-control-hover: #172720;
+  --lc-focus: rgba(135, 213, 186, 0.5);
+  --lc-shadow: 0 24px 64px rgba(0, 0, 0, 0.28);
+  --lc-shadow-soft: 0 12px 34px rgba(0, 0, 0, 0.2);
+  --el-color-primary: #87d5ba;
+  --el-color-primary-light-3: #6ab39a;
+  --el-color-primary-light-5: #4f8875;
+  --el-color-primary-light-7: #355d50;
+  --el-color-primary-light-8: #29483e;
+  --el-color-primary-light-9: #1d332a;
+  --el-color-primary-dark-2: #a4e2cd;
+  --el-color-danger: #d47c63;
+  --el-bg-color: #111c17;
+  --el-bg-color-overlay: #15231d;
+  --el-fill-color-blank: #111c17;
+  --el-fill-color-light: #172720;
+  --el-fill-color-lighter: #192a23;
+  --el-fill-color-extra-light: #1c2e26;
+  --el-fill-color-dark: #0c1712;
+  --el-border-color: rgba(236, 223, 194, 0.2);
+  --el-border-color-light: rgba(236, 223, 194, 0.14);
+  --el-border-color-lighter: rgba(236, 223, 194, 0.1);
+  --el-text-color-primary: #ecdfc2;
+  --el-text-color-regular: #c5bea9;
+  --el-text-color-secondary: #95a59e;
+  --el-text-color-placeholder: #718078;
+  --el-mask-color: rgba(3, 8, 6, 0.62);
 }
 
 *,
@@ -47,27 +126,25 @@ body,
   min-height: 100%;
 }
 
+html {
+  background: var(--lc-bg);
+  -webkit-tap-highlight-color: transparent;
+}
+
 body {
   margin: 0;
   color: var(--lc-text);
-  background:
-    linear-gradient(135deg, rgba(11, 122, 102, 0.1), transparent 32%),
-    linear-gradient(315deg, rgba(183, 122, 23, 0.08), transparent 34%),
-    linear-gradient(180deg, rgba(255, 255, 255, 0.72), rgba(255, 255, 255, 0.18)),
-    var(--lc-bg);
-  font-family:
-    "HarmonyOS Sans SC",
-    "MiSans",
-    "PingFang SC",
-    "Microsoft YaHei",
-    "Segoe UI",
-    sans-serif;
+  background: var(--lc-bg);
+  font-family: var(--lc-font-serif);
   font-size: 14px;
-  line-height: 1.45;
+  line-height: 1.5;
   overflow: hidden;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  transition:
+    color 220ms ease,
+    background-color 220ms ease;
 }
 
 button,
@@ -78,9 +155,31 @@ textarea {
 
 button {
   color: inherit;
+  touch-action: manipulation;
 }
 
 a {
   color: inherit;
   text-decoration: none;
+}
+
+::selection {
+  color: var(--lc-surface);
+  background: var(--lc-accent);
+}
+
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: var(--lc-line-strong);
+  background-clip: padding-box;
 }
