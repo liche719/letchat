@@ -66,11 +66,11 @@
                 :class="{ unavailable: captchaUnavailable }"
                 type="button"
                 @click="refreshCaptcha"
-                title="刷新验证码"
-                aria-label="刷新图形验证码"
+                :title="captchaUnavailable ? '验证码加载失败，点击重试' : '刷新验证码'"
+                :aria-label="captchaUnavailable ? '验证码加载失败，点击重试' : '刷新图形验证码'"
               >
                 <img v-if="captchaUrl" :src="captchaUrl" alt="图形验证码" width="110" height="40" />
-                <Refresh v-else :size="18" />
+                <span v-else class="captcha-fallback">{{ captchaUnavailable ? '点击刷新' : '加载中…' }}</span>
               </button>
             </div>
           </el-form-item>
@@ -100,7 +100,7 @@ import { onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import type { FormInstance, FormRules } from 'element-plus'
 import { ElMessage } from 'element-plus'
-import { ChatDotRound, Key, Lock, Message, Refresh } from '@element-plus/icons-vue'
+import { ChatDotRound, Key, Lock, Message } from '@element-plus/icons-vue'
 import AuthPreview from '@/components/AuthPreview.vue'
 import ThemeToggle from '@/components/ThemeToggle.vue'
 import { useUserStore } from '@/stores/user'

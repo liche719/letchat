@@ -208,8 +208,7 @@ export const useUserStore = defineStore('user', () => {
   }
 
   async function getCheckCode() {
-    const response = await authApi.getCheckCode()
-    return response.data
+    return authApi.getCheckCode()
   }
 
   return {
