@@ -220,6 +220,7 @@ try {
         if ($r.code -ne 200) {
             throw "sendMessage failed: $($r | ConvertTo-Json -Compress -Depth 6)"
         }
+        $script:lastOnlineSequence = [long]$r.data.sequenceNo
         $wsText = Receive-WsText $script:bobWs 8000
         if ($wsText -notlike "*$message*") {
             throw "bob did not receive websocket message: $wsText"
@@ -244,6 +245,31 @@ Invoke-Step 'load chat messages' {
     $r = Call-Form '/chat/loadChatMessage' @{ contactId = [string]$bob.userId; pageNo = '1' } $aliceHeaders
     if ($r.code -ne 200 -or @($r.data.list).Count -lt 1) {
         throw "loadChatMessage failed: $($r | ConvertTo-Json -Compress -Depth 8)"
+    }
+    'ok'
+} | Out-Null
+
+Invoke-Step 'send offline private message' {
+    $script:offlineMessage = 'offline hello ' + [Guid]::NewGuid().ToString('N').Substring(0, 8)
+    $r = Call-Form '/chat/sendMessage' @{
+        contactId = [string]$bob.userId
+        messageContent = $script:offlineMessage
+        messageType = '2'
+    } $aliceHeaders
+    if ($r.code -ne 200 -or [long]$r.data.sequenceNo -le $script:lastOnlineSequence) {
+        throw "offline message failed: $($r | ConvertTo-Json -Compress -Depth 6)"
+    }
+    "sequence=$($r.data.sequenceNo)"
+} | Out-Null
+
+Invoke-Step 'sync offline message' {
+    $r = Call-Form '/chat/syncMessages' @{
+        contactId = [string]$alice.userId
+        afterSequence = [string]$script:lastOnlineSequence
+        limit = '20'
+    } $bobHeaders
+    if ($r.code -ne 200 -or @($r.data | Where-Object { $_.messageContent -eq $script:offlineMessage }).Count -ne 1) {
+        throw "offline sync failed: $($r | ConvertTo-Json -Compress -Depth 8)"
     }
     'ok'
 } | Out-Null
