@@ -1,3 +1,7 @@
+param(
+    [int]$RequestTimeoutSeconds = 15
+)
+
 $ErrorActionPreference = 'Stop'
 
 $base = 'http://localhost:7070/api'
@@ -9,7 +13,7 @@ function Call-Form {
         [hashtable]$Body = @{},
         [hashtable]$Headers = @{}
     )
-    $resp = Invoke-WebRequest -Method POST -Uri "$base$Path" -Body $Body -Headers $Headers -UseBasicParsing
+    $resp = Invoke-WebRequest -Method POST -Uri "$base$Path" -Body $Body -Headers $Headers -UseBasicParsing -TimeoutSec $RequestTimeoutSeconds
     return $resp.Content | ConvertFrom-Json
 }
 
@@ -47,14 +51,14 @@ function Percentile {
 
 function Start-RequestJob {
     param([string]$Token, [string]$Name, [string]$Path, [hashtable]$Body)
-    Start-Job -ArgumentList $Token,$Name,$Path,($Body | ConvertTo-Json -Compress) -ScriptBlock {
-        param($token, $name, $path, $bodyJson)
+    Start-Job -ArgumentList $Token,$Name,$Path,($Body | ConvertTo-Json -Compress),$RequestTimeoutSeconds -ScriptBlock {
+        param($token, $name, $path, $bodyJson, $timeoutSeconds)
         $body = $bodyJson | ConvertFrom-Json
         $hash = @{}
         $body.PSObject.Properties | ForEach-Object { $hash[$_.Name] = [string]$_.Value }
         $sw = [Diagnostics.Stopwatch]::StartNew()
         try {
-            $resp = Invoke-WebRequest -Method POST -Uri "http://localhost:7070/api$path" -Body $hash -Headers @{ token=$token } -UseBasicParsing
+            $resp = Invoke-WebRequest -Method POST -Uri "http://localhost:7070/api$path" -Body $hash -Headers @{ token=$token } -UseBasicParsing -TimeoutSec $timeoutSeconds
             $sw.Stop()
             $json = $resp.Content | ConvertFrom-Json
             [pscustomobject]@{

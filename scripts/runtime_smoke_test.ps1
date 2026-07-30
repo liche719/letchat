@@ -1,3 +1,7 @@
+param(
+    [int]$RequestTimeoutSeconds = 15
+)
+
 $ErrorActionPreference = 'Stop'
 
 $base = 'http://localhost:7070/api'
@@ -37,7 +41,7 @@ function Call-Form {
         [hashtable]$Body = @{},
         [hashtable]$Headers = @{}
     )
-    $resp = Invoke-WebRequest -Method POST -Uri "$base$Path" -Body $Body -Headers $Headers -UseBasicParsing
+    $resp = Invoke-WebRequest -Method POST -Uri "$base$Path" -Body $Body -Headers $Headers -UseBasicParsing -TimeoutSec $RequestTimeoutSeconds
     $json = $resp.Content | ConvertFrom-Json
     return $json
 }
@@ -132,7 +136,7 @@ function Create-WsTicket {
 }
 
 Invoke-Step 'api docs' {
-    $resp = Invoke-WebRequest -Method GET -Uri "$base/v3/api-docs" -UseBasicParsing
+    $resp = Invoke-WebRequest -Method GET -Uri "$base/v3/api-docs" -UseBasicParsing -TimeoutSec $RequestTimeoutSeconds
     if ($resp.StatusCode -ne 200 -or $resp.Content -notlike '*openapi*') {
         throw 'api docs unavailable'
     }

@@ -46,7 +46,7 @@ public class ChatController extends ABaseController {
     private ChatMessageService chatMessageService;
 
     /**
-     * 发送消息 TODO 使用RabbitMQ
+     * 发送消息。消息、会话摘要与 Outbox 由应用服务在同一事务内写入。
      */
     @RequestMapping("/sendMessage")
     @GlobalInterception

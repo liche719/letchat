@@ -1,12 +1,14 @@
 param(
     [string]$BaseUrl = 'http://localhost:7070/api',
-    [string]$RedisContainer = 'letchat-test-redis'
+    [string]$RedisContainer = 'letchat-test-redis',
+    [int]$RequestTimeoutSeconds = 15
 )
 
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Net.Http
 
 $http = [System.Net.Http.HttpClient]::new()
+$http.Timeout = [TimeSpan]::FromSeconds($RequestTimeoutSeconds)
 
 function Assert-Ok {
     param($Response, [string]$Step)
@@ -26,7 +28,7 @@ function Invoke-Form {
     if ($Token) {
         $headers.token = $Token
     }
-    $response = Invoke-WebRequest -Method POST -Uri "$BaseUrl$Path" -Body $Body -Headers $headers -UseBasicParsing
+    $response = Invoke-WebRequest -Method POST -Uri "$BaseUrl$Path" -Body $Body -Headers $headers -UseBasicParsing -TimeoutSec $RequestTimeoutSeconds
     return $response.Content | ConvertFrom-Json
 }
 

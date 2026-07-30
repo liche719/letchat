@@ -210,7 +210,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
 
-        //TODO CHAT类型初始也为0？
+        // 媒体消息在二进制文件上传完成前保持发送中状态。
         Integer status = MessageTypeEnum.MEDIA_CHAT == messageTypeEnum ? MessageStatusEnum.SENDING.getStatus() : MessageStatusEnum.SENT.getStatus();
         chatMessage.setStatus(status);
 
