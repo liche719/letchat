@@ -1,6 +1,10 @@
 FROM eclipse-temurin:21-jre-jammy
 
-RUN groupadd --system letchat && useradd --system --gid letchat --home-dir /app letchat
+RUN apt-get update \
+    && apt-get install --no-install-recommends -y wget \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd --system letchat \
+    && useradd --system --gid letchat --home-dir /app letchat
 
 WORKDIR /app
 COPY letchat_java/target/letchat-1.0.jar /app/app.jar
