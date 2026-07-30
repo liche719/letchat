@@ -19,7 +19,7 @@ letchat/
 
 ## Tech Stack
 
-- Backend: Java 8 source compatibility, JDK 21 verified runtime, Spring Boot 2.6.1, MyBatis, MySQL, Redis, RabbitMQ, Netty WebSocket
+- Backend: Java 21, Spring Boot 3.3.5, MyBatis, MySQL, Redis, RabbitMQ, Netty WebSocket, MinIO
 - Frontend: Vue 3, TypeScript, Vite, Element Plus, Pinia, Vue Router, Axios
 - Build tools: Maven, npm
 
@@ -98,7 +98,7 @@ docker compose -p letchat -f docker-compose-test.yml up -d
 
 The runtime smoke test covers authentication, registration and login, two WebSocket clients, real-time private messaging, RabbitMQ persistence, history loading, and queue drain verification. The group-lifecycle smoke test creates a disposable group, adds and removes a member, verifies group-message persistence and access revocation, then dissolves the group. The backend unit tests also cover group-owner authorization, member removal, owner-leave protection, and avatar fallback handling.
 
-For the chat-history query comparison, a fixed dataset of 20,000 messages in one private session was tested with 40 requests and 8 concurrent workers. The median of three runs improved from 24.36 to 244.18 QPS, while p95 latency dropped from 370.18 ms to 42.96 ms. The complete environment, raw results, calculation, and reproduction commands are recorded in [Chat history performance evidence](docs/chat-history-performance.md).
+For the chat-history query benchmark, a fixed dataset of 20,000 messages in one private session was tested with 16 concurrent workers and 5,000 formal requests per run. Across three local runs, the median reached 190.57 QPS with 157.29 ms p95 latency and 15,000 successful formal requests. The complete environment, raw results, calculation, and reproduction commands are recorded in [Chat history performance evidence](docs/chat-history-performance.md).
 
 ## Notes
 
