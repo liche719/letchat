@@ -25,6 +25,7 @@ spring:
       database: ${REDIS_DATABASE:1}
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
+      password: ${REDIS_PASSWORD:}
       jedis:
         pool:
           max-active: ${REDIS_POOL_MAX_ACTIVE:20}

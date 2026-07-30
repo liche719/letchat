@@ -11,6 +11,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.serializer.RedisSerializer;
+import org.springframework.util.StringUtils;
 
 @Configuration
 @Slf4j
@@ -22,12 +23,19 @@ public class RedisConfig {
     @Value("${spring.data.redis.port}")
     private Integer redisPort;
 
+    @Value("${spring.data.redis.password:}")
+    private String redisPassword;
+
     @Bean(name = "redissonClient", destroyMethod = "shutdown")
     public RedissonClient redissonClient() {
         try {
             Config config = new Config();
             config.setCodec(new JsonJacksonCodec());
-            config.useSingleServer().setAddress("redis://" + redisHost + ":" + redisPort);
+            var singleServerConfig = config.useSingleServer()
+                    .setAddress("redis://" + redisHost + ":" + redisPort);
+            if (StringUtils.hasText(redisPassword)) {
+                singleServerConfig.setPassword(redisPassword);
+            }
             return Redisson.create(config);
         } catch (Exception e) {
             log.error("redis配置错误", e);
