@@ -21,6 +21,7 @@ services:
     restart: unless-stopped
     environment:
       TZ: Asia/Shanghai
+      SPRING_CONFIG_NAME: application.example
       SERVER_PORT: 7070
       WS_PORT: 7071
       DB_URL: jdbc:mysql://mysql:3306/letchat?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai
