@@ -132,7 +132,7 @@ export const useUserStore = defineStore('user', () => {
       const response = await userApi.createWebSocketTicket()
       if (!token.value) return
 
-      const wsBase = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:7071/ws'
+      const wsBase = import.meta.env.VITE_WS_BASE_URL || '/socket.io'
       const separator = wsBase.includes('?') ? '&' : '?'
       socket.value = new WebSocket(
         `${wsBase}${separator}ticket=${encodeURIComponent(response.data.ticket)}`,
