@@ -116,10 +116,19 @@ function Receive-WsText {
 }
 
 function Connect-Ws {
-    param([string]$Token)
+    param([string]$Ticket)
     $socket = [System.Net.WebSockets.ClientWebSocket]::new()
-    $null = $socket.ConnectAsync([Uri]"ws://localhost:7071/ws?token=$Token", [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+    $null = $socket.ConnectAsync([Uri]"ws://localhost:7071/ws?ticket=$Ticket", [Threading.CancellationToken]::None).GetAwaiter().GetResult()
     return $socket
+}
+
+function Create-WsTicket {
+    param([hashtable]$Headers)
+    $r = Call-Form '/account/wsTicket' @{} $Headers
+    if ($r.code -ne 200 -or -not $r.data.ticket) {
+        throw "wsTicket failed: $($r | ConvertTo-Json -Compress -Depth 6)"
+    }
+    return [string]$r.data.ticket
 }
 
 Invoke-Step 'api docs' {
@@ -152,8 +161,16 @@ Invoke-Step 'login registered user' {
     "userId=$($registeredUser.userId)"
 } | Out-Null
 
-$alice = Invoke-Step 'login alice' { Login-User 'alice@example.com' }
-$bob = Invoke-Step 'login bob' { Login-User 'bob@example.com' }
+$alice = $null
+$bob = $null
+Invoke-Step 'login alice' {
+    $script:alice = Login-User 'alice@example.com'
+    "userId=$($script:alice.userId)"
+} | Out-Null
+Invoke-Step 'login bob' {
+    $script:bob = Login-User 'bob@example.com'
+    "userId=$($script:bob.userId)"
+} | Out-Null
 
 $aliceHeaders = @{ token = [string]$alice.token }
 $bobHeaders = @{ token = [string]$bob.token }
@@ -170,7 +187,7 @@ $aliceWs = $null
 $bobWs = $null
 try {
     Invoke-Step 'websocket alice init' {
-        $socket = Connect-Ws ([string]$alice.token)
+        $socket = Connect-Ws (Create-WsTicket $aliceHeaders)
         $msg = Receive-WsText $socket
         if ($msg -notlike '*"messageType":0*') {
             throw "init message missing: $msg"
@@ -180,7 +197,7 @@ try {
     } | Out-Null
 
     Invoke-Step 'websocket bob init' {
-        $socket = Connect-Ws ([string]$bob.token)
+        $socket = Connect-Ws (Create-WsTicket $bobHeaders)
         $msg = Receive-WsText $socket
         if ($msg -notlike '*"messageType":0*') {
             throw "init message missing: $msg"
@@ -204,16 +221,16 @@ try {
             throw "bob did not receive websocket message: $wsText"
         }
         Start-Sleep -Milliseconds 800
-        $count = docker exec $mysqlContainer mysql -uroot -p123456 --batch --skip-column-names letchat -e "SELECT COUNT(*) FROM chat_message WHERE message_content='$message';"
+        $count = docker exec -e MYSQL_PWD=123456 $mysqlContainer mysql -uroot --batch --skip-column-names letchat -e "SELECT COUNT(*) FROM chat_message WHERE message_content='$message';"
         if ([int]($count | Select-Object -First 1) -lt 1) {
-            throw "message was not persisted by MQ consumer"
+            throw "message was not persisted in the HTTP transaction"
         }
         "message=$message"
     } | Out-Null
 } finally {
     foreach ($socket in @($script:aliceWs, $script:bobWs)) {
         if ($socket -and $socket.State -eq [System.Net.WebSockets.WebSocketState]::Open) {
-            $null = $socket.CloseAsync([System.Net.WebSockets.WebSocketCloseStatus]::NormalClosure, 'done', [Threading.CancellationToken]::None).GetAwaiter().GetResult()
+            $socket.Abort()
             $socket.Dispose()
         }
     }
@@ -230,14 +247,14 @@ Invoke-Step 'load chat messages' {
 Invoke-Step 'queue drained' {
     $queues = docker exec letchat-test-rabbitmq rabbitmqctl list_queues name messages_ready messages_unacknowledged --formatter json
     $queueRows = $queues | ConvertFrom-Json
-    $chatQueue = $queueRows | Where-Object { $_.name -eq 'chat.message.queue' } | Select-Object -First 1
-    if (-not $chatQueue) {
-        throw "chat queue missing: $queues"
+    $chatQueues = @($queueRows | Where-Object { $_.name -match '^chat\.message\.queue\.[0-3]$' })
+    if ($chatQueues.Count -ne 4) {
+        throw "expected four chat shard queues: $queues"
     }
-    if ($chatQueue.messages_ready -ne 0 -or $chatQueue.messages_unacknowledged -ne 0) {
+    if (@($chatQueues | Where-Object { $_.messages_ready -ne 0 -or $_.messages_unacknowledged -ne 0 }).Count -gt 0) {
         throw "chat queue not drained: $queues"
     }
-    "ready=$($chatQueue.messages_ready), unacked=$($chatQueue.messages_unacknowledged)"
+    "four shard queues drained"
 } | Out-Null
 
 $results | ConvertTo-Json -Depth 8

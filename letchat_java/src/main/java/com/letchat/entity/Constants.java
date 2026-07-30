@@ -20,6 +20,8 @@ public class Constants {
     public static final String REDIS_KEY_WS_TOKEN = "letchat:ws:token:";
     public static final String REDIS_KEY_WS_TOKEN_USERID = "letchat:ws:token:userid:";
 
+    public static final String REDIS_KEY_WS_TICKET = "letchat:ws:ticket:";
+
     public static final String ROBOT_UID = UserContactTypeEnum.USER.getPrefix() + "robot";
 
     public static final String REDIS_KEY_SYS_SETTING = "letchat:syssetting:";

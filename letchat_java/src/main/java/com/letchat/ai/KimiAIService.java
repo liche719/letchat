@@ -1,15 +1,22 @@
 package com.letchat.ai;
 
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONArray;
-import com.alibaba.fastjson.JSONObject;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.letchat.utils.StringTools;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
+import okhttp3.MediaType;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.RequestBody;
+import okhttp3.Response;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import java.util.*;
+import java.util.ArrayDeque;
+import java.util.Deque;
+import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 
@@ -17,7 +24,8 @@ import java.util.concurrent.TimeUnit;
 @Slf4j
 public class KimiAIService {
 
-    private static final String BASE_URL = "https://api.moonshot.cn/v1/chat/completions";
+    private static final MediaType JSON_MEDIA_TYPE = MediaType.get("application/json; charset=utf-8");
+    private static final int MAX_HISTORY_SIZE = 10;
 
     @Value("${kimi.enabled:false}")
     private Boolean enabled;
@@ -25,134 +33,95 @@ public class KimiAIService {
     @Value("${kimi.api-key:}")
     private String apiKey;
 
+    @Value("${kimi.base-url:https://api.moonshot.cn/v1/chat/completions}")
+    private String baseUrl;
+
     @Value("${kimi.model:moonshot-v1-8k}")
     private String model;
 
-    // 存储每个用户的对话历史，实际项目中建议使用Redis等外部存储
-    private final Map<String, Deque<JSONObject>> sessionHistories = new ConcurrentHashMap<>();
+    private final ObjectMapper objectMapper;
+    private final OkHttpClient client;
+    private final Map<String, Deque<ObjectNode>> sessionHistories = new ConcurrentHashMap<>();
 
-    // 控制最大历史记录数
-    private static final int MAX_HISTORY_SIZE = 10;
+    public KimiAIService(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+        this.client = new OkHttpClient.Builder()
+                .connectTimeout(30, TimeUnit.SECONDS)
+                .readTimeout(60, TimeUnit.SECONDS)
+                .writeTimeout(60, TimeUnit.SECONDS)
+                .build();
+    }
 
-    private final OkHttpClient client = new OkHttpClient.Builder()
-            .connectTimeout(30, TimeUnit.SECONDS)
-            .readTimeout(60, TimeUnit.SECONDS)
-            .writeTimeout(60, TimeUnit.SECONDS)
-            .build();
-
-    /**
-     * 调用 Kimi 大模型获取 AI 回复（带上下文版本）
-     *
-     * @param userId      用户ID，用于区分不同用户的对话
-     * @param userMessage 用户输入的消息
-     * @return AI 回复内容
-     */
-    public String getAiReplyWithContext(String userId, String userMessage) {
+    public String getAiReplyWithContext(String sessionId, String userMessage) {
         if (!Boolean.TRUE.equals(enabled) || StringTools.isEmpty(apiKey)) {
             return "AI 服务暂时不可用，请稍后再试。";
         }
 
-        // 获取或创建该会话的历史记录
-        Deque<JSONObject> history = sessionHistories.computeIfAbsent(userId, k -> new ArrayDeque<>());
-
-        // 添加用户消息到历史记录
-        JSONObject userMessageObj = new JSONObject();
-        userMessageObj.put("role", "user");
-        userMessageObj.put("content", userMessage);
-        addToHistory(history, userMessageObj);
-
-        try {
-            // 构建请求体 JSON
-            JSONArray messages = new JSONArray();
-            messages.addAll(history);
-
-            JSONObject requestBody = new JSONObject();
-            requestBody.put("model", model);
-            requestBody.put("max_tokens", 1024);
-            requestBody.put("messages", messages);
-
-            RequestBody body = RequestBody.create(
-                    MediaType.parse("application/json; charset=utf-8"),
-                    requestBody.toJSONString()
-            );
-
-            Request request = new Request.Builder()
-                    .url(BASE_URL)
-                    .addHeader("Authorization", "Bearer " + apiKey)
-                    .addHeader("Content-Type", "application/json")
-                    .post(body)
-                    .build();
-
-            Response response = null;
+        Deque<ObjectNode> history = sessionHistories.computeIfAbsent(sessionId, ignored -> new ArrayDeque<>());
+        synchronized (history) {
+            addToHistory(history, message("user", userMessage));
             try {
-                response = client.newCall(request).execute();
-                if (!response.isSuccessful()) {
-                    log.error("Kimi API 调用失败，状态码: {}", response.code());
-                    return "AI 服务暂时不可用，请稍后再试。";
+                ObjectNode requestJson = objectMapper.createObjectNode();
+                requestJson.put("model", model);
+                requestJson.put("max_tokens", 1024);
+                ArrayNode messages = requestJson.putArray("messages");
+                history.forEach(messages::add);
+
+                Request request = new Request.Builder()
+                        .url(baseUrl)
+                        .addHeader("Authorization", "Bearer " + apiKey)
+                        .post(RequestBody.create(objectMapper.writeValueAsBytes(requestJson), JSON_MEDIA_TYPE))
+                        .build();
+
+                try (Response response = client.newCall(request).execute()) {
+                    if (!response.isSuccessful()) {
+                        log.error("Kimi API request failed, status={}", response.code());
+                        return "AI 服务暂时不可用，请稍后再试。";
+                    }
+                    if (response.body() == null) {
+                        return "AI 未返回有效内容。";
+                    }
+                    String aiReply = parseReply(response.body().string());
+                    addToHistory(history, message("assistant", aiReply));
+                    return aiReply;
                 }
-
-                String responseBody = response.body().string();
-                log.debug("Kimi 原始响应: {}", responseBody);
-
-                String aiReply = parseReply(responseBody);
-
-                // 添加AI回复到历史记录
-                JSONObject aiMessageObj = new JSONObject();
-                aiMessageObj.put("role", "assistant");
-                aiMessageObj.put("content", aiReply);
-                addToHistory(history, aiMessageObj);
-
-                return aiReply;
-            } finally {
-                if (response != null && response.body() != null) {
-                    response.body().close();
-                }
+            } catch (Exception exception) {
+                log.error("Kimi API request failed", exception);
+                return "AI 服务暂时不可用，请稍后再试。";
             }
-        } catch (Exception e) {
-            log.error("调用 Kimi API 时发生异常", e);
-            return "抱歉，AI 服务出错了：" + e.getMessage();
         }
     }
 
-    /**
-     * 添加消息到历史记录，并控制历史记录大小
-     */
-    private void addToHistory(Deque<JSONObject> history, JSONObject message) {
-        // 如果历史记录已满，移除最旧的一条记录（一问一答为一组）
-        if (history.size() >= MAX_HISTORY_SIZE) {
-            history.pollFirst(); // 移除最早的用户消息
-        }
-        history.addLast(message); // 添加新消息
-    }
-
-    /**
-     * 清除指定会话的历史记录
-     */
     public void clearContext(String sessionId) {
         sessionHistories.remove(sessionId);
     }
 
-    /**
-     * 解析 Kimi 返回的 JSON，提取回复文本
-     */
+    private ObjectNode message(String role, String content) {
+        ObjectNode message = objectMapper.createObjectNode();
+        message.put("role", role);
+        message.put("content", content);
+        return message;
+    }
+
+    private void addToHistory(Deque<ObjectNode> history, ObjectNode message) {
+        while (history.size() >= MAX_HISTORY_SIZE) {
+            history.pollFirst();
+        }
+        history.addLast(message);
+    }
+
     private String parseReply(String json) {
         try {
-            JSONObject obj = JSON.parseObject(json);
-            if (obj.containsKey("choices")) {
-                JSONArray choices = obj.getJSONArray("choices");
-                if (choices.size() > 0) {
-                    JSONObject choice = choices.getJSONObject(0);
-                    if (choice.containsKey("message")) {
-                        JSONObject message = choice.getJSONObject("message");
-                        if (message.containsKey("content")) {
-                            return message.getString("content");
-                        }
-                    }
-                }
-            }
-            return "Kimi 未返回有效内容。";
-        } catch (Exception e) {
-            log.error("解析 Kimi 响应失败", e);
+            JsonNode content = objectMapper.readTree(json)
+                    .path("choices")
+                    .path(0)
+                    .path("message")
+                    .path("content");
+            return content.isTextual() && !content.asText().isBlank()
+                    ? content.asText()
+                    : "AI 未返回有效内容。";
+        } catch (Exception exception) {
+            log.error("Failed to parse Kimi response", exception);
             return "AI 回复解析失败。";
         }
     }

@@ -7,6 +7,8 @@
     <resultMap id="base_result_map" type="com.letchat.entity.po.ChatMessage">
         <!--消息自增ID-->
         <id column="message_id" property="messageId"/>
+        <result column="client_message_id" property="clientMessageId"/>
+        <result column="sequence_no" property="sequenceNo"/>
         <!--会话ID-->
         <result column="session_id" property="sessionId"/>
         <!--消息类型-->
@@ -214,14 +216,17 @@
     </insert>
 
     <!-- 插入或者更新 （匹配有值的字段）-->
-    <insert id="insertOrUpdate" parameterType="com.letchat.entity.po.ChatMessage">
-        <selectKey keyProperty="bean.messageId" resultType="Long" order="AFTER">
-            SELECT LAST_INSERT_ID()
-        </selectKey>
+    <insert id="insertMessage" parameterType="com.letchat.entity.po.ChatMessage">
         INSERT INTO chat_message
         <trim prefix="(" suffix=")" suffixOverrides=",">
             <if test="bean.messageId != null">
                 message_id,
+            </if>
+            <if test="bean.clientMessageId != null">
+                client_message_id,
+            </if>
+            <if test="bean.sequenceNo != null">
+                sequence_no,
             </if>
             <if test="bean.sessionId != null">
                 session_id,
@@ -264,6 +269,12 @@
             <if test="bean.messageId!=null">
                 #{bean.messageId},
             </if>
+            <if test="bean.clientMessageId!=null">
+                #{bean.clientMessageId},
+            </if>
+            <if test="bean.sequenceNo!=null">
+                #{bean.sequenceNo},
+            </if>
             <if test="bean.sessionId!=null">
                 #{bean.sessionId},
             </if>
@@ -299,45 +310,6 @@
             </if>
             <if test="bean.status!=null">
                 #{bean.status},
-            </if>
-        </trim>
-        on DUPLICATE key update
-        <trim prefix="" suffix="" suffixOverrides=",">
-            <if test="bean.sessionId!=null">
-                session_id = VALUES(session_id),
-            </if>
-            <if test="bean.messageType!=null">
-                message_type = VALUES(message_type),
-            </if>
-            <if test="bean.messageContent!=null">
-                message_content = VALUES(message_content),
-            </if>
-            <if test="bean.sendUserId!=null">
-                send_user_id = VALUES(send_user_id),
-            </if>
-            <if test="bean.sendUserNickName!=null">
-                send_user_nick_name = VALUES(send_user_nick_name),
-            </if>
-            <if test="bean.sendTime!=null">
-                send_time = VALUES(send_time),
-            </if>
-            <if test="bean.contactId!=null">
-                contact_id = VALUES(contact_id),
-            </if>
-            <if test="bean.contactType!=null">
-                contact_type = VALUES(contact_type),
-            </if>
-            <if test="bean.fileSize!=null">
-                file_size = VALUES(file_size),
-            </if>
-            <if test="bean.fileName!=null">
-                file_name = VALUES(file_name),
-            </if>
-            <if test="bean.fileType!=null">
-                file_type = VALUES(file_type),
-            </if>
-            <if test="bean.status!=null">
-                status = VALUES(status),
             </if>
         </trim>
     </insert>
@@ -540,6 +512,22 @@
           and c.send_time = #{bean.sendTime}
           and c.message_type = #{bean.messageType}
         limit 1
+    </select>
+
+    <select id="selectByClientMessageId" resultMap="base_result_map">
+        select *
+        from chat_message c
+        where c.client_message_id = #{clientMessageId}
+        limit 1
+    </select>
+
+    <select id="selectAfterSequence" resultMap="base_result_map">
+        select *
+        from chat_message c
+        where c.session_id = #{sessionId}
+          and c.sequence_no &gt; #{afterSequence}
+        order by c.sequence_no asc
+        limit #{limit}
     </select>
 
 </mapper>

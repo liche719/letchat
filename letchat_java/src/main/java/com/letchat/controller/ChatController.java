@@ -12,6 +12,7 @@ import com.letchat.entity.vo.PaginationResultVO;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
 import com.letchat.service.ChatMessageService;
+import com.letchat.storage.StoredObject;
 import com.letchat.utils.StringTools;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.commons.lang3.ArrayUtils;
@@ -20,12 +21,12 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
-import javax.annotation.Resource;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.NotNull;
-import javax.validation.constraints.Size;
+import jakarta.annotation.Resource;
+import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletResponse;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
@@ -53,6 +54,7 @@ public class ChatController extends ABaseController {
                                   @NotEmpty String contactId,
                                   @NotEmpty @Size(max = 500) String messageContent,
                                   @NotNull Integer messageType,
+                                  String clientMessageId,
                                   Long fileSize,
                                   String fileName,
                                   Integer fileType) {
@@ -67,6 +69,7 @@ public class ChatController extends ABaseController {
         chatMessage.setSendUserNickName(tokenUserInfoDto.getNickName());
         chatMessage.setContactId(contactId);
         chatMessage.setMessageContent(messageContent);
+        chatMessage.setClientMessageId(clientMessageId);
         if (MessageTypeEnum.MEDIA_CHAT.getType().equals(messageType)) {
             chatMessage.setFileSize(fileSize);
             chatMessage.setFileName(fileName);
@@ -120,6 +123,36 @@ public class ChatController extends ABaseController {
         return getSuccessResponseVO(result);
     }
 
+    @RequestMapping("/syncMessages")
+    @GlobalInterception
+    public ResponseVO syncMessages(HttpServletRequest request,
+                                   @NotEmpty String contactId,
+                                   Long afterSequence,
+                                   Integer limit) {
+        TokenUserInfoDto user = getTokenUserInfo(request);
+        return getSuccessResponseVO(chatMessageService.syncMessages(
+                user.getUserId(), contactId, afterSequence, limit
+        ));
+    }
+
+    @RequestMapping("/ackDelivered")
+    @GlobalInterception
+    public ResponseVO acknowledgeDelivered(HttpServletRequest request,
+                                            @NotEmpty String contactId,
+                                            @NotNull Long sequenceNo) {
+        chatMessageService.acknowledgeDelivered(getTokenUserInfo(request).getUserId(), contactId, sequenceNo);
+        return getSuccessResponseVO(null);
+    }
+
+    @RequestMapping("/ackRead")
+    @GlobalInterception
+    public ResponseVO acknowledgeRead(HttpServletRequest request,
+                                      @NotEmpty String contactId,
+                                      @NotNull Long sequenceNo) {
+        chatMessageService.acknowledgeRead(getTokenUserInfo(request).getUserId(), contactId, sequenceNo);
+        return getSuccessResponseVO(null);
+    }
+
     /**
      * 下载文件
      *
@@ -133,14 +166,27 @@ public class ChatController extends ABaseController {
                              HttpServletResponse response,
                              @NotEmpty String fileId,
                              @NotNull Boolean showCover) throws IOException {
-        File file;
         if (StringTools.isNumber(fileId)) {
             TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
-            file = chatMessageService.downloadFile(tokenUserInfoDto, Long.parseLong(fileId), showCover);
-        } else {
-            file = resolveAvatarFile(fileId, showCover);
+            StoredObject storedObject = chatMessageService.downloadFile(
+                    tokenUserInfoDto,
+                    Long.parseLong(fileId),
+                    showCover
+            );
+            response.setContentType(storedObject.contentType() == null
+                    ? "application/octet-stream"
+                    : storedObject.contentType());
+            response.setHeader("Content-Disposition", "attachment;");
+            if (storedObject.size() >= 0) {
+                response.setContentLengthLong(storedObject.size());
+            }
+            try (var in = storedObject.inputStream(); OutputStream out = response.getOutputStream()) {
+                in.transferTo(out);
+            }
+            return;
         }
 
+        File file = resolveAvatarFile(fileId, showCover);
         response.setContentType("application/x-msdownload;charset=UTF-8");
         response.setHeader("Content-Disposition", "attachment;");
         response.setContentLengthLong(file.length());

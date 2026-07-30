@@ -1,15 +1,13 @@
 package com.letchat.controller;
 
-import com.letchat.entity.Constants;
 import com.letchat.entity.dto.TokenUserInfoDto;
 import com.letchat.entity.enums.ResponseCodeEnum;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
-import com.letchat.utils.StringTools;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.data.redis.core.RedisTemplate;
+import org.springframework.security.core.Authentication;
+import org.springframework.security.core.context.SecurityContextHolder;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
 
 public class ABaseController {
@@ -17,9 +15,6 @@ public class ABaseController {
     protected static final String SUCCESS = "success";
 
     protected static final String ERROR = "error";
-
-    @Autowired
-    private RedisTemplate<String, Object> redisTemplate;
 
     protected <T> ResponseVO getSuccessResponseVO(T t) {
         ResponseVO<T> responseVO = new ResponseVO<>();
@@ -53,12 +48,8 @@ public class ABaseController {
     }
 
     protected TokenUserInfoDto getTokenUserInfo(HttpServletRequest request) {
-        String token = request.getHeader("token");
-        if (StringTools.isEmpty(token)) {
-            throw new BusinessException(ResponseCodeEnum.CODE_901);
-        }
-        TokenUserInfoDto tokenUserInfoDto = (TokenUserInfoDto) redisTemplate.opsForValue().get(Constants.REDIS_KEY_WS_TOKEN + token);
-        if (tokenUserInfoDto == null) {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !(authentication.getPrincipal() instanceof TokenUserInfoDto tokenUserInfoDto)) {
             throw new BusinessException(ResponseCodeEnum.CODE_901);
         }
         return tokenUserInfoDto;

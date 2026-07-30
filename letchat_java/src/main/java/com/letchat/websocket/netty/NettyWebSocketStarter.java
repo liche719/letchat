@@ -8,6 +8,8 @@ import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelInitializer;
 import io.netty.channel.ChannelPipeline;
 import io.netty.channel.EventLoopGroup;
+import io.netty.util.concurrent.DefaultEventExecutorGroup;
+import io.netty.util.concurrent.EventExecutorGroup;
 import io.netty.channel.nio.NioEventLoopGroup;
 import io.netty.channel.socket.nio.NioServerSocketChannel;
 import io.netty.handler.codec.http.HttpObjectAggregator;
@@ -18,7 +20,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.SmartLifecycle;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.concurrent.TimeUnit;
 
 @Component
@@ -34,6 +36,7 @@ public class NettyWebSocketStarter implements SmartLifecycle {
     private volatile boolean running;
     private EventLoopGroup bossGroup;
     private EventLoopGroup workerGroup;
+    private EventExecutorGroup businessGroup;
     private Channel serverChannel;
 
     @Override
@@ -45,6 +48,14 @@ public class NettyWebSocketStarter implements SmartLifecycle {
         int wsPort = resolveWsPort();
         bossGroup = new NioEventLoopGroup(1);
         workerGroup = new NioEventLoopGroup();
+        businessGroup = new DefaultEventExecutorGroup(
+                Math.max(2, Runtime.getRuntime().availableProcessors()),
+                runnable -> {
+                    Thread thread = new Thread(runnable, "letchat-ws-business");
+                    thread.setDaemon(true);
+                    return thread;
+                }
+        );
         try {
             ServerBootstrap serverBootstrap = new ServerBootstrap();
             serverBootstrap.group(bossGroup, workerGroup)
@@ -71,7 +82,7 @@ public class NettyWebSocketStarter implements SmartLifecycle {
                                     true,
                                     10000L
                             ));
-                            pipeline.addLast(handlerWebSocket);
+                            pipeline.addLast(businessGroup, handlerWebSocket);
                         }
                     });
 
@@ -139,6 +150,10 @@ public class NettyWebSocketStarter implements SmartLifecycle {
         if (workerGroup != null) {
             workerGroup.shutdownGracefully().syncUninterruptibly();
             workerGroup = null;
+        }
+        if (businessGroup != null) {
+            businessGroup.shutdownGracefully().syncUninterruptibly();
+            businessGroup = null;
         }
     }
 }

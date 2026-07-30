@@ -17,6 +17,7 @@ import type {
 const TEXT_MESSAGE = 2
 const MEDIA_MESSAGE = 5
 const INIT_MESSAGE = 0
+const CURSOR_PREFIX = 'letchat_cursor'
 
 function toContactKind(type: unknown): ContactKind {
   if (type === 'G' || type === 'GROUP' || type === 1 || type === '1') return 'G'
@@ -105,6 +106,8 @@ export const useChatStore = defineStore('chat', () => {
     const contactId = resolveConversationId(raw)
     return {
       messageId: String(raw.messageId || `ws-${raw.sendTime || Date.now()}-${Math.random().toString(16).slice(2)}`),
+      clientMessageId: raw.clientMessageId,
+      sequenceNo: raw.sequenceNo,
       sessionId: raw.sessionId,
       contactId,
       rawContactId: raw.contactId,
@@ -160,6 +163,7 @@ export const useChatStore = defineStore('chat', () => {
 
     const index = messages.value.findIndex((item) => {
       if (message.localId && item.localId === message.localId) return true
+      if (message.clientMessageId && item.clientMessageId === message.clientMessageId) return true
       return item.messageId === message.messageId
     })
 
@@ -168,7 +172,10 @@ export const useChatStore = defineStore('chat', () => {
     } else {
       messages.value.push(message)
     }
-    messages.value.sort((a, b) => a.sendTime - b.sendTime)
+    messages.value.sort((a, b) => {
+      if (a.sequenceNo != null && b.sequenceNo != null) return a.sequenceNo - b.sequenceNo
+      return a.sendTime - b.sendTime
+    })
     updateContactSummary(message, false)
   }
 
@@ -186,6 +193,7 @@ export const useChatStore = defineStore('chat', () => {
         return contact
       })
       sortContacts()
+      void syncOfflineMessages()
     } finally {
       loadingContacts.value = false
     }
@@ -224,6 +232,11 @@ export const useChatStore = defineStore('chat', () => {
     currentContact.value = contact
     contact.unreadCount = 0
     await loadMessages(contact.contactId)
+    const latestSequence = messages.value.reduce((max, message) => Math.max(max, message.sequenceNo || 0), 0)
+    if (latestSequence > 0) {
+      saveCursor(contact.contactId, latestSequence)
+      void chatApi.acknowledgeRead(contact.contactId, latestSequence)
+    }
   }
 
   function clearCurrentContact() {
@@ -233,13 +246,13 @@ export const useChatStore = defineStore('chat', () => {
     hasMoreMessages.value = false
   }
 
-  async function sendMessage(content: string) {
+  async function sendMessage(content: string, retryClientMessageId?: string) {
     if (!currentContact.value) return null
     const text = content.trim()
     if (!text) return null
 
     sending.value = true
-    const localId = `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
+    const localId = retryClientMessageId || `local-${Date.now()}-${Math.random().toString(16).slice(2)}`
     const optimistic: ChatMessage = {
       messageId: localId,
       localId,
@@ -259,6 +272,7 @@ export const useChatStore = defineStore('chat', () => {
         contactId: currentContact.value.contactId,
         messageContent: text,
         messageType: TEXT_MESSAGE,
+        clientMessageId: localId,
       })
       const saved = normalizeMessage(response.data, 'sent')
       saved.localId = localId
@@ -298,6 +312,7 @@ export const useChatStore = defineStore('chat', () => {
         contactId: currentContact.value.contactId,
         messageContent: file.name,
         messageType: MEDIA_MESSAGE,
+        clientMessageId: localId,
         fileSize: file.size,
         fileName: file.name,
         fileType: MEDIA_MESSAGE,
@@ -338,6 +353,46 @@ export const useChatStore = defineStore('chat', () => {
 
     const message = normalizeMessage(payload, payload.sendUserId === userStore.userInfo?.userId ? 'sent' : 'received')
     upsertMessage(message)
+    acknowledgeMessage(message)
+  }
+
+  function cursorKey(contactId: string) {
+    return `${CURSOR_PREFIX}:${userStore.userInfo?.userId || 'anonymous'}:${contactId}`
+  }
+
+  function readCursor(contactId: string) {
+    const value = Number(localStorage.getItem(cursorKey(contactId)) || 0)
+    return Number.isFinite(value) && value > 0 ? value : 0
+  }
+
+  function saveCursor(contactId: string, sequenceNo: number) {
+    const next = Math.max(readCursor(contactId), sequenceNo)
+    localStorage.setItem(cursorKey(contactId), String(next))
+  }
+
+  function acknowledgeMessage(message: ChatMessage) {
+    if (!message.sequenceNo || !message.contactId) return
+    saveCursor(message.contactId, message.sequenceNo)
+    void chatApi.acknowledgeDelivered(message.contactId, message.sequenceNo)
+    if (currentContact.value?.contactId === message.contactId) {
+      void chatApi.acknowledgeRead(message.contactId, message.sequenceNo)
+    }
+  }
+
+  async function syncOfflineMessages() {
+    await Promise.allSettled(
+      contacts.value.map(async (contact) => {
+        const response = await chatApi.syncMessages(contact.contactId, readCursor(contact.contactId))
+        for (const raw of response.data || []) {
+          const message = normalizeMessage(
+            raw,
+            raw.sendUserId === userStore.userInfo?.userId ? 'sent' : 'received',
+          )
+          upsertMessage(message)
+          acknowledgeMessage(message)
+        }
+      }),
+    )
   }
 
   function attachSocket() {
@@ -353,7 +408,7 @@ export const useChatStore = defineStore('chat', () => {
 
   function retryMessage(message: ChatMessage) {
     if (message.messageType === TEXT_MESSAGE) {
-      return sendMessage(message.messageContent)
+      return sendMessage(message.messageContent, message.clientMessageId || message.localId)
     }
     ElMessage.warning('媒体消息请重新选择文件后发送')
     return Promise.resolve(null)

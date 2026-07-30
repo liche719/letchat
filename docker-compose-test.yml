@@ -44,3 +44,25 @@ services:
       timeout: 10s
       retries: 20
       start_period: 20s
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    container_name: letchat-test-minio
+    command: server /data --console-address ":9001"
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: letchat
+      MINIO_ROOT_PASSWORD: letchat-secret
+    ports:
+      - "39000:9000"
+      - "39001:9001"
+    volumes:
+      - letchat-minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+
+volumes:
+  letchat-minio-data:

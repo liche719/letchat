@@ -6,7 +6,7 @@ import com.letchat.mappers.ChatSessionMapper;
 import com.letchat.service.ChatSessionService;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 
 /**

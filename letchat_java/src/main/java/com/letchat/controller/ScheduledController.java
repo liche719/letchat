@@ -6,7 +6,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 import org.springframework.web.bind.annotation.RequestMapping;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 
 @Component("scheduledController")
 @RequestMapping("/scheduled")

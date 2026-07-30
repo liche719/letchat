@@ -22,6 +22,7 @@ class RabbitMQConfigTest {
                 RabbitMQConfig.CHAT_MESSAGE_DEAD_LETTER_ROUTING_KEY,
                 queue.getArguments().get("x-dead-letter-routing-key")
         );
+        assertEquals(true, queue.getArguments().get("x-single-active-consumer"));
     }
 
     @Test

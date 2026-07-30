@@ -1,7 +1,8 @@
 package com.letchat.mq;
 
-import com.alibaba.fastjson.JSON;
 import com.letchat.config.RabbitMQConfig;
+import com.letchat.entity.po.ChatMessage;
+import com.letchat.utils.JsonUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.AmqpException;
 import org.springframework.amqp.core.Message;
@@ -10,8 +11,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.PostConstruct;
-import javax.annotation.Resource;
+import jakarta.annotation.PostConstruct;
+import jakarta.annotation.Resource;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -43,19 +44,31 @@ public class ChatMessageProducer<T> {
     }
 
     public void saveChatMessage(T payload) {
-        String message = JSON.toJSONString(payload);
+        String message = JsonUtils.convertObj2Json(payload);
+        String routingKey = payload instanceof ChatMessage chatMessage && chatMessage.getSessionId() != null
+                ? RabbitMQConfig.routingKeyForSession(chatMessage.getSessionId())
+                : RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY;
+        publishPayload(message, routingKey);
+    }
+
+    public void publishPayload(String message, String routingKey) {
         publishWithConfirm(correlationData -> rabbitTemplate.convertAndSend(
                 RabbitMQConfig.CHAT_MESSAGE_EXCHANGE,
-                RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY,
+                routingKey,
                 message,
                 correlationData
         ));
     }
 
     public void republishChatMessage(Message message) {
+        String routingKey = message.getMessageProperties().getReceivedRoutingKey();
+        if (routingKey == null || routingKey.isBlank()) {
+            routingKey = RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY;
+        }
+        String finalRoutingKey = routingKey;
         publishWithConfirm(correlationData -> rabbitTemplate.send(
                 RabbitMQConfig.CHAT_MESSAGE_EXCHANGE,
-                RabbitMQConfig.CHAT_MESSAGE_ROUTING_KEY,
+                finalRoutingKey,
                 message,
                 correlationData
         ));

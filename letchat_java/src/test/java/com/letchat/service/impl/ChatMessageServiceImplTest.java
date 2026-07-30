@@ -1,38 +1,43 @@
 package com.letchat.service.impl;
 
-import com.letchat.config.AppConfig;
 import com.letchat.entity.dto.SysSettingDto;
 import com.letchat.entity.po.ChatMessage;
+import com.letchat.entity.po.ChatSession;
 import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.query.ChatMessageQuery;
+import com.letchat.entity.query.ChatSessionQuery;
 import com.letchat.entity.vo.PaginationResultVO;
 import com.letchat.exception.BusinessException;
 import com.letchat.mappers.ChatMessageMapper;
-import com.letchat.mq.ChatMessageProducer;
+import com.letchat.mappers.ChatMessageOutboxMapper;
+import com.letchat.mappers.ChatMessageSequenceMapper;
+import com.letchat.mappers.ChatMessageReceiptMapper;
+import com.letchat.mappers.ChatSessionMapper;
 import com.letchat.redis.RedisComponent;
+import com.letchat.storage.FileStorage;
 import com.letchat.utils.MessageIdGenerator;
 import com.letchat.utils.StringTools;
 import com.letchat.websocket.MessageHandler;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
+import org.springframework.context.ApplicationEventPublisher;
 
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.util.Collections;
-import java.util.stream.Stream;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.Mockito.never;
 
 @ExtendWith(MockitoExtension.class)
 class ChatMessageServiceImplTest {
@@ -44,7 +49,16 @@ class ChatMessageServiceImplTest {
     private RedisComponent redisComponent;
 
     @Mock
-    private ChatMessageProducer<ChatMessage> chatMessageProducer;
+    private ChatMessageOutboxMapper chatMessageOutboxMapper;
+
+    @Mock
+    private ChatMessageSequenceMapper chatMessageSequenceMapper;
+
+    @Mock
+    private ChatMessageReceiptMapper chatMessageReceiptMapper;
+
+    @Mock
+    private ChatSessionMapper<ChatSession, ChatSessionQuery> chatSessionMapper;
 
     @Mock
     private MessageHandler messageHandler;
@@ -53,10 +67,10 @@ class ChatMessageServiceImplTest {
     private MessageIdGenerator messageIdGenerator;
 
     @Mock
-    private AppConfig appConfig;
+    private FileStorage fileStorage;
 
-    @TempDir
-    Path tempDirectory;
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @InjectMocks
     private ChatMessageServiceImpl chatMessageService;
@@ -75,7 +89,7 @@ class ChatMessageServiceImplTest {
         verify(chatMessageMapper).selectList(queryCaptor.capture());
         ChatMessageQuery query = queryCaptor.getValue();
         assertEquals(StringTools.getChatSessionId4User(new String[]{userId, contactId}), query.getSessionId());
-        assertEquals("send_time desc", query.getOrderBy());
+        assertEquals("sequence_no desc", query.getOrderBy());
         assertEquals(20, query.getPageSize());
         assertEquals(2, result.getPageNo());
         assertEquals(2, result.getPageTotal());
@@ -93,11 +107,44 @@ class ChatMessageServiceImplTest {
     }
 
     @Test
+    void offlineSyncUsesMonotonicSequenceCursorAndCapsBatchSize() {
+        String userId = "U1001";
+        String contactId = "U1002";
+        when(redisComponent.getUserContactList(userId)).thenReturn(List.of(contactId));
+        when(chatMessageMapper.selectAfterSequence(any(String.class), anyLong(), anyInt()))
+                .thenReturn(List.of(new ChatMessage().setSequenceNo(101L)));
+
+        List<ChatMessage> result = chatMessageService.syncMessages(userId, contactId, 100L, 10_000);
+
+        assertEquals(101L, result.getFirst().getSequenceNo());
+        verify(chatMessageMapper).selectAfterSequence(
+                StringTools.getChatSessionId4User(new String[]{userId, contactId}),
+                100L,
+                500
+        );
+    }
+
+    @Test
+    void deliveryAndReadAcknowledgementsAreMonotonicMapperOperations() {
+        String userId = "U1001";
+        String contactId = "U1002";
+        String sessionId = StringTools.getChatSessionId4User(new String[]{userId, contactId});
+        when(redisComponent.getUserContactList(userId)).thenReturn(List.of(contactId));
+
+        chatMessageService.acknowledgeDelivered(userId, contactId, 9L);
+        chatMessageService.acknowledgeRead(userId, contactId, 10L);
+
+        verify(chatMessageReceiptMapper).acknowledgeDelivered(userId, sessionId, 9L);
+        verify(chatMessageReceiptMapper).acknowledgeRead(userId, sessionId, 10L);
+    }
+
+    @Test
     void assignsMessageIdBeforePublishingAsynchronously() {
         String userId = "U1001";
         String contactId = "U1002";
         when(redisComponent.getUserContactList(userId)).thenReturn(Collections.singletonList(contactId));
         when(messageIdGenerator.nextId()).thenReturn(123456789L);
+        when(chatMessageSequenceMapper.lastAllocated()).thenReturn(1L);
         ChatMessage message = new ChatMessage()
                 .setSendUserId(userId)
                 .setSendUserNickName("Alice")
@@ -108,8 +155,39 @@ class ChatMessageServiceImplTest {
         MessageSendDto result = chatMessageService.saveMessage(message);
 
         assertEquals(123456789L, result.getMessageId());
-        verify(chatMessageProducer).saveChatMessage(message);
-        verify(messageHandler).sendMessage(result);
+        verify(chatMessageOutboxMapper).insert(any());
+        verify(chatMessageSequenceMapper).allocateNext(StringTools.getChatSessionId4User(new String[]{userId, contactId}));
+        verify(chatMessageMapper).insertMessage(message);
+        org.mockito.Mockito.verifyNoInteractions(messageHandler);
+    }
+
+    @Test
+    void retryWithSameClientMessageIdReturnsExistingMessageWithoutNewOutboxEvent() {
+        String userId = "U1001";
+        String contactId = "U1002";
+        ChatMessage existing = new ChatMessage()
+                .setMessageId(99L)
+                .setClientMessageId("client-1")
+                .setSendUserId(userId)
+                .setContactId(contactId)
+                .setMessageType(2)
+                .setMessageContent("hello")
+                .setSequenceNo(7L);
+        when(redisComponent.getUserContactList(userId)).thenReturn(List.of(contactId));
+        when(chatMessageMapper.selectByClientMessageId("client-1")).thenReturn(existing);
+        ChatMessage retry = new ChatMessage()
+                .setClientMessageId("client-1")
+                .setSendUserId(userId)
+                .setContactId(contactId)
+                .setMessageType(2)
+                .setMessageContent("hello");
+
+        MessageSendDto result = chatMessageService.saveMessage(retry);
+
+        assertEquals(99L, result.getMessageId());
+        assertEquals(7L, result.getSequenceNo());
+        verify(chatMessageSequenceMapper, never()).allocateNext(any(String.class));
+        verify(chatMessageOutboxMapper, never()).insert(any());
     }
 
     @Test
@@ -122,7 +200,6 @@ class ChatMessageServiceImplTest {
                 .setSendTime(System.currentTimeMillis());
         when(chatMessageMapper.selectByMessageId(messageId)).thenReturn(persistedMessage);
         when(redisComponent.getSysSetting()).thenReturn(new SysSettingDto());
-        when(appConfig.getProjectFolderPath()).thenReturn(tempDirectory);
         MockMultipartFile file = new MockMultipartFile(
                 "file",
                 "sample.png",
@@ -138,9 +215,8 @@ class ChatMessageServiceImplTest {
 
         chatMessageService.saveMessageFile("U1001", messageId, file, cover);
 
-        try (Stream<Path> paths = Files.walk(tempDirectory)) {
-            assertTrue(paths.anyMatch(path -> path.getFileName().toString().equals(messageId + ".png")));
-        }
+        verify(fileStorage, org.mockito.Mockito.times(2))
+                .put(any(String.class), any(), anyLong(), any());
         verify(chatMessageMapper).updateByParam(any(ChatMessage.class), any(ChatMessageQuery.class));
     }
 }

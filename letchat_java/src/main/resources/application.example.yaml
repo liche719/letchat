@@ -16,17 +16,22 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
     username: ${DB_USERNAME:letchat}
     password: ${DB_PASSWORD:change-me}
-  redis:
-    database: ${REDIS_DATABASE:1}
-    host: ${REDIS_HOST:localhost}
-    port: ${REDIS_PORT:6379}
-    jedis:
-      pool:
-        max-active: ${REDIS_POOL_MAX_ACTIVE:20}
-        max-wait: ${REDIS_POOL_MAX_WAIT:-1}
-        max-idle: ${REDIS_POOL_MAX_IDLE:10}
-        min-idle: ${REDIS_POOL_MIN_IDLE:0}
-    timeout: ${REDIS_TIMEOUT:2000}
+  flyway:
+    enabled: true
+    baseline-on-migrate: true
+    baseline-version: 1
+  data:
+    redis:
+      database: ${REDIS_DATABASE:1}
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      jedis:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:20}
+          max-wait: ${REDIS_POOL_MAX_WAIT:-1}
+          max-idle: ${REDIS_POOL_MAX_IDLE:10}
+          min-idle: ${REDIS_POOL_MIN_IDLE:0}
+      timeout: ${REDIS_TIMEOUT:2000}
   rabbitmq:
     host: ${RABBITMQ_HOST:localhost}
     port: ${RABBITMQ_PORT:5672}
@@ -39,18 +44,30 @@ spring:
       mandatory: true
     listener:
       simple:
-        concurrency: ${RABBITMQ_LISTENER_CONCURRENCY:5}
-        max-concurrency: ${RABBITMQ_LISTENER_MAX_CONCURRENCY:10}
-        prefetch: ${RABBITMQ_LISTENER_PREFETCH:20}
+        concurrency: 1
+        max-concurrency: 1
+        prefetch: 1
         acknowledge-mode: manual
         default-requeue-rejected: false
     connection-timeout: ${RABBITMQ_CONNECTION_TIMEOUT:10000}
 
 logging:
   level:
-    com.letchat: ${LOG_LEVEL_LETCHAT:DEBUG}
+    com.letchat: ${LOG_LEVEL_LETCHAT:INFO}
   pattern:
     dateformat: HH:mm:ss:SSS
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: when_authorized
+  metrics:
+    tags:
+      application: ${spring.application.name}
 
 knife4j:
   enable: true
@@ -75,14 +92,24 @@ admin:
 kimi:
   enabled: ${KIMI_ENABLED:false}
   api-key: ${KIMI_API_KEY:}
+  base-url: ${KIMI_BASE_URL:https://api.moonshot.cn/v1/chat/completions}
   model: ${KIMI_MODEL:moonshot-v1-8k}
 
 letchat:
+  websocket:
+    ticket-ttl-seconds: ${WS_TICKET_TTL_SECONDS:30}
+  storage:
+    endpoint: ${MINIO_ENDPOINT:http://localhost:39000}
+    access-key: ${MINIO_ACCESS_KEY:letchat}
+    secret-key: ${MINIO_SECRET_KEY:letchat-secret}
+    bucket: ${MINIO_BUCKET:letchat}
   message-id:
     worker-id: ${CHAT_MESSAGE_WORKER_ID:0}
-  message-upload:
-    metadata-wait-timeout-ms: ${CHAT_MESSAGE_METADATA_WAIT_TIMEOUT_MS:3000}
-    metadata-poll-interval-ms: ${CHAT_MESSAGE_METADATA_POLL_INTERVAL_MS:50}
   rabbitmq:
     publisher-confirm-timeout-ms: ${CHAT_PUBLISHER_CONFIRM_TIMEOUT_MS:3000}
     publisher-max-retries: ${CHAT_PUBLISHER_MAX_RETRIES:3}
+  outbox:
+    batch-size: ${CHAT_OUTBOX_BATCH_SIZE:100}
+    max-retries: ${CHAT_OUTBOX_MAX_RETRIES:10}
+    dispatch-interval-ms: ${CHAT_OUTBOX_DISPATCH_INTERVAL_MS:200}
+    claim-timeout-seconds: ${CHAT_OUTBOX_CLAIM_TIMEOUT_SECONDS:300}

@@ -18,6 +18,11 @@ export interface CheckCode {
   checkCodeKey: string
 }
 
+export interface WebSocketTicket {
+  ticket: string
+  expiresInSeconds: number
+}
+
 export interface UserInfo {
   userId: string
   email?: string
@@ -127,6 +132,8 @@ export type MessageSendStatus = 'sending' | 'sent' | 'failed' | 'received'
 
 export interface BackendChatMessage {
   messageId?: number | string
+  clientMessageId?: string
+  sequenceNo?: number
   sessionId?: string
   messageType: number
   messageContent?: string
@@ -147,6 +154,8 @@ export interface BackendChatMessage {
 export interface ChatMessage {
   messageId: string
   localId?: string
+  clientMessageId?: string
+  sequenceNo?: number
   sessionId?: string
   contactId: string
   rawContactId?: string

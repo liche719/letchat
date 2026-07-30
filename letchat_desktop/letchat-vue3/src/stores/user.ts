@@ -35,6 +35,7 @@ export const useUserStore = defineStore('user', () => {
   let reconnectAttempts = 0
   let reconnectTimer: Timer | null = null
   let heartbeatTimer: Timer | null = null
+  let socketConnectPromise: Promise<void> | null = null
 
   function persistSession(nextToken: string, nextUser: UserInfo) {
     token.value = nextToken
@@ -85,19 +86,14 @@ export const useUserStore = defineStore('user', () => {
   function scheduleReconnect() {
     if (!token.value || reconnectTimer || socketStatus.value === 'open') return
 
-    const maxAttempts = 8
-    if (reconnectAttempts >= maxAttempts) {
-      socketStatus.value = 'closed'
-      ElMessage.warning('连接已断开，请重新登录')
-      clearSession()
-      return
+    const delay = reconnectAttempts >= 8 ? 60000 : Math.min(1000 * 2 ** reconnectAttempts, 20000)
+    if (reconnectAttempts === 8) {
+      ElMessage.warning('实时消息连接暂不可用，登录状态已保留，系统会继续重试')
     }
-
-    const delay = Math.min(1000 * 2 ** reconnectAttempts, 20000)
     reconnectAttempts += 1
     reconnectTimer = setTimeout(() => {
       reconnectTimer = null
-      connectSocket()
+      void connectSocket()
     }, delay)
   }
 
@@ -123,35 +119,54 @@ export const useUserStore = defineStore('user', () => {
     if (!token.value) return
     if (socket.value?.readyState === WebSocket.OPEN || socket.value?.readyState === WebSocket.CONNECTING) return
 
-    const wsBase = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:7071/ws'
-    const separator = wsBase.includes('?') ? '&' : '?'
-    socketStatus.value = 'connecting'
-    socket.value = new WebSocket(`${wsBase}${separator}token=${encodeURIComponent(token.value)}`)
+    if (socketConnectPromise) return socketConnectPromise
+    socketConnectPromise = openSocket().finally(() => {
+      socketConnectPromise = null
+    })
+    return socketConnectPromise
+  }
 
-    socket.value.onopen = () => {
-      isOnline.value = true
-      socketStatus.value = 'open'
-      reconnectAttempts = 0
-      startHeartbeat()
-    }
+  async function openSocket() {
+    try {
+      socketStatus.value = 'connecting'
+      const response = await userApi.createWebSocketTicket()
+      if (!token.value) return
 
-    socket.value.onmessage = (event) => {
-      notifySocketMessage(event.data)
-    }
+      const wsBase = import.meta.env.VITE_WS_BASE_URL || 'ws://localhost:7071/ws'
+      const separator = wsBase.includes('?') ? '&' : '?'
+      socket.value = new WebSocket(
+        `${wsBase}${separator}ticket=${encodeURIComponent(response.data.ticket)}`,
+      )
 
-    socket.value.onerror = () => {
+      socket.value.onopen = () => {
+        isOnline.value = true
+        socketStatus.value = 'open'
+        reconnectAttempts = 0
+        startHeartbeat()
+      }
+
+      socket.value.onmessage = (event) => {
+        notifySocketMessage(event.data)
+      }
+
+      socket.value.onerror = () => {
+        isOnline.value = false
+        socketStatus.value = 'error'
+      }
+
+      socket.value.onclose = (event) => {
+        stopHeartbeat()
+        isOnline.value = false
+        socketStatus.value = 'closed'
+        socket.value = null
+        if (event.code !== 1000) {
+          scheduleReconnect()
+        }
+      }
+    } catch {
       isOnline.value = false
       socketStatus.value = 'error'
-    }
-
-    socket.value.onclose = (event) => {
-      stopHeartbeat()
-      isOnline.value = false
-      socketStatus.value = 'closed'
-      socket.value = null
-      if (event.code !== 1000) {
-        scheduleReconnect()
-      }
+      scheduleReconnect()
     }
   }
 

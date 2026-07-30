@@ -15,7 +15,14 @@ class ChatControllerSecurityTest {
     @Test
     void mutatingAndHistoryEndpointsRequireLogin() {
         Set<String> protectedMethods = Arrays.stream(ChatController.class.getDeclaredMethods())
-                .filter(method -> Arrays.asList("sendMessage", "uploadFile", "loadChatMessage").contains(method.getName()))
+                .filter(method -> Arrays.asList(
+                        "sendMessage",
+                        "uploadFile",
+                        "loadChatMessage",
+                        "syncMessages",
+                        "acknowledgeDelivered",
+                        "acknowledgeRead"
+                ).contains(method.getName()))
                 .map(Method::getName)
                 .collect(Collectors.toSet());
 

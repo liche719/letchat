@@ -20,6 +20,10 @@ public class ChatMessage implements Serializable {
 	 */
 	private Long messageId;
 
+	private String clientMessageId;
+
+	private Long sequenceNo;
+
 	/**
 	 * 会话ID
 	 */

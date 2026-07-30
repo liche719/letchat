@@ -10,16 +10,16 @@ class HandlerWebSocketTest {
     private final HandlerWebSocket handler = new HandlerWebSocket();
 
     @Test
-    void extractsEncodedTokenAmongOtherQueryParameters() {
+    void extractsEncodedTicketAmongOtherQueryParameters() {
         assertEquals(
-                "token/value",
-                handler.getToken("/ws?client=web&token=token%2Fvalue&version=1")
+                "ticket/value",
+                handler.getTicket("/ws?client=web&ticket=ticket%2Fvalue&version=1")
         );
     }
 
     @Test
-    void returnsNullWhenTokenIsMissing() {
-        assertNull(handler.getToken("/ws?client=web"));
-        assertNull(handler.getToken("/ws"));
+    void returnsNullWhenTicketIsMissing() {
+        assertNull(handler.getTicket("/ws?client=web"));
+        assertNull(handler.getTicket("/ws"));
     }
 }

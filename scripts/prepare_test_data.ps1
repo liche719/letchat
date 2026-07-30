@@ -13,6 +13,10 @@ SET @bob = 'U10000100002';
 SET @password = MD5('Test@123456');
 SET @session = MD5(CONCAT(LEAST(@alice, @bob), GREATEST(@alice, @bob)));
 
+DELETE FROM chat_message_inbox;
+DELETE FROM chat_message_outbox;
+DELETE FROM chat_delivery_cursor;
+DELETE FROM chat_session_sequence;
 DELETE FROM chat_message;
 DELETE FROM chat_session_user;
 DELETE FROM chat_session;
@@ -36,9 +40,9 @@ VALUES
   (@bob, @alice, 0, NOW(), 1, NOW());
 
 INSERT INTO chat_session
-  (session_id, last_message, last_receive_time)
+  (session_id, last_message, last_receive_time, last_sequence_no)
 VALUES
-  (@session, 'runtime seeded session', UNIX_TIMESTAMP(NOW(3)) * 1000);
+  (@session, 'runtime seeded session', UNIX_TIMESTAMP(NOW(3)) * 1000, 0);
 
 INSERT INTO chat_session_user
   (user_id, contact_id, session_id, contact_name)

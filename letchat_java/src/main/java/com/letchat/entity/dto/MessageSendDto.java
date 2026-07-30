@@ -11,6 +11,8 @@ public class MessageSendDto<T> implements Serializable {
 
     // 消息id
     private Long messageId;
+    private String clientMessageId;
+    private Long sequenceNo;
     // 会话id
     private String sessionId;
     //发送人

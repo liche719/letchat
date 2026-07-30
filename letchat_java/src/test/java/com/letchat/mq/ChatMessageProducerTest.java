@@ -32,7 +32,7 @@ class ChatMessageProducerTest {
     void returnsAfterBrokerConfirmsMessage() {
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(3);
-            correlationData.getFuture().set(new CorrelationData.Confirm(true, null));
+            correlationData.getFuture().complete(new CorrelationData.Confirm(true, null));
             return null;
         }).when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(String.class), any(CorrelationData.class));
 
@@ -47,7 +47,7 @@ class ChatMessageProducerTest {
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(3);
             boolean ack = attempts.incrementAndGet() == 3;
-            correlationData.getFuture().set(new CorrelationData.Confirm(ack, ack ? null : "broker nack"));
+            correlationData.getFuture().complete(new CorrelationData.Confirm(ack, ack ? null : "broker nack"));
             return null;
         }).when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(String.class), any(CorrelationData.class));
 
@@ -61,7 +61,7 @@ class ChatMessageProducerTest {
     void failsAfterInitialAttemptAndThreeRetries() {
         doAnswer(invocation -> {
             CorrelationData correlationData = invocation.getArgument(3);
-            correlationData.getFuture().set(new CorrelationData.Confirm(false, "broker nack"));
+            correlationData.getFuture().complete(new CorrelationData.Confirm(false, "broker nack"));
             return null;
         }).when(rabbitTemplate).convertAndSend(anyString(), anyString(), any(String.class), any(CorrelationData.class));
 

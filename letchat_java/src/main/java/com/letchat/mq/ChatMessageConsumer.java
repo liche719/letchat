@@ -1,14 +1,12 @@
 package com.letchat.mq;
 
-import com.alibaba.fastjson.JSON;
 import com.letchat.config.RabbitMQConfig;
-import com.letchat.entity.enums.UserContactTypeEnum;
+import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.po.ChatMessage;
-import com.letchat.entity.po.ChatSession;
-import com.letchat.entity.query.ChatMessageQuery;
-import com.letchat.entity.query.ChatSessionQuery;
-import com.letchat.mappers.ChatMessageMapper;
-import com.letchat.mappers.ChatSessionMapper;
+import com.letchat.mappers.ChatMessageInboxMapper;
+import com.letchat.utils.CopyTools;
+import com.letchat.utils.JsonUtils;
+import com.letchat.websocket.MessageHandler;
 import com.rabbitmq.client.Channel;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.amqp.core.Message;
@@ -18,7 +16,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 
@@ -27,10 +25,7 @@ import java.nio.charset.StandardCharsets;
 public class ChatMessageConsumer {
 
     @Resource
-    private ChatMessageMapper<ChatMessage, ChatMessageQuery> chatMessageMapper;
-
-    @Resource
-    private ChatSessionMapper<ChatSession, ChatSessionQuery> chatSessionMapper;
+    private ChatMessageInboxMapper chatMessageInboxMapper;
 
     @Resource
     private ChatMessageProducer<?> chatMessageProducer;
@@ -38,21 +33,27 @@ public class ChatMessageConsumer {
     @Resource
     private TransactionTemplate transactionTemplate;
 
+    @Resource
+    private MessageHandler messageHandler;
+
     private final ChatMessageRetryPolicy retryPolicy = new ChatMessageRetryPolicy();
 
-    @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE)
+    @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE, concurrency = "1")
+    @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE_1, concurrency = "1")
+    @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE_2, concurrency = "1")
+    @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE_3, concurrency = "1")
     public void processChatMessage(Message amqpMessage,
                                    Channel channel,
                                    @Header(AmqpHeaders.DELIVERY_TAG) long deliveryTag) throws IOException {
         String payload = new String(amqpMessage.getBody(), StandardCharsets.UTF_8);
-        log.info("Received chat message from RabbitMQ: {}", payload);
+        log.debug("Received chat message notification, payloadLength={}", payload.length());
 
         try {
             ChatMessage chatMessage = parsePayload(payload);
-            boolean persisted = saveMessageIdempotently(chatMessage);
+            boolean firstDelivery = deliverIdempotently(chatMessage);
             channel.basicAck(deliveryTag, false);
-            if (persisted) {
-                log.info("Persisted chat message successfully, messageId={}", chatMessage.getMessageId());
+            if (firstDelivery) {
+                log.debug("Delivered chat message notification, messageId={}", chatMessage.getMessageId());
             }
         } catch (InvalidChatMessageException e) {
             log.warn("Rejecting invalid chat message to DLQ: {}", payload, e);
@@ -62,26 +63,17 @@ public class ChatMessageConsumer {
         }
     }
 
-    public boolean saveMessageIdempotently(ChatMessage chatMessage) {
-        Boolean persisted = transactionTemplate.execute(status -> {
-            if (isAlreadyPersisted(chatMessage)) {
-                log.info("Skip duplicate chat message, messageId={}, sessionId={}, sendTime={}",
-                        chatMessage.getMessageId(),
-                        chatMessage.getSessionId(),
-                        chatMessage.getSendTime());
-                return false;
-            }
-
-            ChatSession chatSession = new ChatSession();
-            chatSession.setSessionId(chatMessage.getSessionId());
-            chatSession.setLastMessage(buildLastMessage(chatMessage));
-            chatSession.setLastReceiveTime(chatMessage.getSendTime());
-            chatSessionMapper.updateBySessionId(chatSession, chatSession.getSessionId());
-
-            chatMessageMapper.insertOrUpdate(chatMessage);
-            return true;
-        });
-        return Boolean.TRUE.equals(persisted);
+    public boolean deliverIdempotently(ChatMessage chatMessage) {
+        String eventId = eventId(chatMessage);
+        Boolean firstDelivery = transactionTemplate.execute(
+                status -> chatMessageInboxMapper.insertIfAbsent(eventId) == 1
+        );
+        if (!Boolean.TRUE.equals(firstDelivery)) {
+            log.debug("Skip duplicate chat notification, eventId={}", eventId);
+            return false;
+        }
+        messageHandler.sendMessage(CopyTools.copy(chatMessage, MessageSendDto.class));
+        return true;
     }
 
     private ChatMessage parsePayload(String payload) {
@@ -93,7 +85,7 @@ public class ChatMessageConsumer {
             throw new InvalidChatMessageException("message body is not JSON");
         }
         try {
-            ChatMessage chatMessage = JSON.parseObject(trimmedPayload, ChatMessage.class);
+            ChatMessage chatMessage = JsonUtils.convertJson2Obj(trimmedPayload, ChatMessage.class);
             if (chatMessage == null) {
                 throw new InvalidChatMessageException("message body parsed to null");
             }
@@ -105,28 +97,14 @@ public class ChatMessageConsumer {
         }
     }
 
-    private boolean isAlreadyPersisted(ChatMessage chatMessage) {
-        if (chatMessage.getMessageId() != null
-                && chatMessageMapper.selectByMessageId(chatMessage.getMessageId()) != null) {
-            return true;
+    private String eventId(ChatMessage chatMessage) {
+        if (chatMessage.getClientMessageId() != null && !chatMessage.getClientMessageId().isBlank()) {
+            return chatMessage.getClientMessageId();
         }
-        return hasMessageFingerprint(chatMessage)
-                && chatMessageMapper.selectByMessageFingerprint(chatMessage) != null;
-    }
-
-    private boolean hasMessageFingerprint(ChatMessage chatMessage) {
-        return chatMessage.getSessionId() != null
-                && chatMessage.getSendUserId() != null
-                && chatMessage.getContactId() != null
-                && chatMessage.getSendTime() != null
-                && chatMessage.getMessageType() != null;
-    }
-
-    private String buildLastMessage(ChatMessage chatMessage) {
-        if (UserContactTypeEnum.GROUP == UserContactTypeEnum.getByPrefix(chatMessage.getContactId())) {
-            return chatMessage.getSendUserNickName() + ": " + chatMessage.getMessageContent();
+        if (chatMessage.getMessageId() != null) {
+            return "message-" + chatMessage.getMessageId();
         }
-        return chatMessage.getMessageContent();
+        throw new InvalidChatMessageException("message id is missing");
     }
 
     private void retryOrDeadLetter(Message amqpMessage,

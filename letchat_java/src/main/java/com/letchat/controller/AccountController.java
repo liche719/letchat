@@ -5,6 +5,7 @@ import com.letchat.entity.Constants;
 import com.letchat.entity.vo.CheckCodeVO;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.entity.vo.UserInfoVO;
+import com.letchat.entity.vo.WebSocketTicketVO;
 import com.letchat.exception.BusinessException;
 import com.letchat.redis.RedisComponent;
 import com.letchat.service.UserInfoService;
@@ -15,12 +16,14 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
-import javax.annotation.Resource;
-import javax.validation.constraints.Email;
-import javax.validation.constraints.NotEmpty;
-import javax.validation.constraints.Pattern;
+import jakarta.annotation.Resource;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotEmpty;
+import jakarta.validation.constraints.Pattern;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.beans.factory.annotation.Value;
 
 @RestController("accountController")
 @RequestMapping("/account")
@@ -36,6 +39,9 @@ public class AccountController extends ABaseController {
 
     @Resource
     private RedisComponent redisComponent;
+
+    @Value("${letchat.websocket.ticket-ttl-seconds:30}")
+    private long webSocketTicketTtlSeconds;
 
 
     @RequestMapping("/checkCode")
@@ -92,5 +98,12 @@ public class AccountController extends ABaseController {
     @GlobalInterception
     public ResponseVO login() {
         return getSuccessResponseVO(redisComponent.getSysSetting());
+    }
+
+    @RequestMapping("/wsTicket")
+    @GlobalInterception
+    public ResponseVO<WebSocketTicketVO> createWebSocketTicket(HttpServletRequest request) {
+        String ticket = redisComponent.createWebSocketTicket(getTokenUserInfo(request));
+        return getSuccessResponseVO(new WebSocketTicketVO(ticket, Math.max(1, webSocketTicketTtlSeconds)));
     }
 }

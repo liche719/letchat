@@ -4,10 +4,12 @@ import com.letchat.config.AppConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.SysSettingDto;
 import com.letchat.entity.dto.TokenUserInfoDto;
+import com.letchat.security.SecureTokenGenerator;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -19,6 +21,12 @@ public class RedisComponent {
 
     @Resource
     private AppConfig appConfig;
+
+    @Resource
+    private SecureTokenGenerator secureTokenGenerator;
+
+    @Value("${letchat.websocket.ticket-ttl-seconds:30}")
+    private long webSocketTicketTtlSeconds;
 
     public Long getUserHeartBeat(String userId) {
         return (Long) redisTemplate.opsForValue().get(Constants.REDIS_KEY_WS_USER_HEART_BEAT + userId);
@@ -52,6 +60,22 @@ public class RedisComponent {
             return null;
         }
         return getTokenUserInfoDto(token);
+    }
+
+    public String createWebSocketTicket(TokenUserInfoDto tokenUserInfoDto) {
+        String ticket = secureTokenGenerator.generate();
+        redisTemplate.opsForValue().set(
+                Constants.REDIS_KEY_WS_TICKET + ticket,
+                tokenUserInfoDto,
+                Math.max(1, webSocketTicketTtlSeconds),
+                TimeUnit.SECONDS
+        );
+        return ticket;
+    }
+
+    public TokenUserInfoDto consumeWebSocketTicket(String ticket) {
+        Object value = redisTemplate.opsForValue().getAndDelete(Constants.REDIS_KEY_WS_TICKET + ticket);
+        return value instanceof TokenUserInfoDto tokenUserInfoDto ? tokenUserInfoDto : null;
     }
 
     public void cleanUserTokenByUserId(String userId) {

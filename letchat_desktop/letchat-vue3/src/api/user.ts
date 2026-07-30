@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { ApiResponse, UserInfo } from '@/types/api'
+import type { ApiResponse, UserInfo, WebSocketTicket } from '@/types/api'
 
 export const userApi = {
   getUserInfo() {
@@ -27,5 +27,9 @@ export const userApi = {
 
   logout() {
     return request.post<unknown, ApiResponse<string>>('/userInfo/logout')
+  },
+
+  createWebSocketTicket() {
+    return request.post<unknown, ApiResponse<WebSocketTicket>>('/account/wsTicket')
   },
 }

@@ -15,9 +15,16 @@ SET @bob = 'U10000100002';
 SET @session = MD5(CONCAT(LEAST(@alice, @bob), GREATEST(@alice, @bob)));
 SET @base_time = 1700000000000;
 
+DELETE FROM chat_message_inbox;
+DELETE FROM chat_message_outbox;
+DELETE FROM chat_delivery_cursor;
+DELETE FROM chat_session_sequence;
 DELETE FROM chat_message;
 
 INSERT INTO chat_message (
+  message_id,
+  client_message_id,
+  sequence_no,
   session_id,
   message_type,
   message_content,
@@ -29,6 +36,9 @@ INSERT INTO chat_message (
   status
 )
 SELECT
+  900000000000000 + numbers.n,
+  CONCAT('perf-', numbers.n),
+  numbers.n + 1,
   @session,
   2,
   CONCAT('performance-message-', numbers.n),
@@ -55,8 +65,14 @@ WHERE numbers.n <= $messageLimit;
 
 UPDATE chat_session
 SET last_message = CONCAT('performance-message-', $messageLimit),
-    last_receive_time = @base_time + $messageLimit
+    last_receive_time = @base_time + $messageLimit,
+    last_sequence_no = $MessageCount
 WHERE session_id = @session;
+
+INSERT INTO chat_session_sequence(session_id, last_sequence)
+VALUES(@session, $MessageCount);
+
+ANALYZE TABLE chat_message;
 
 SELECT COUNT(*) AS message_count, MIN(send_time) AS first_send_time, MAX(send_time) AS last_send_time
 FROM chat_message

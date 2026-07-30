@@ -72,6 +72,8 @@ public class ChatHistoryHttpBenchmark {
 
         start.countDown();
         if (!done.await(options.timeoutSeconds, TimeUnit.SECONDS)) {
+            workers.shutdownNow();
+            httpExecutor.shutdownNow();
             throw new IllegalStateException("Benchmark timed out after " + options.timeoutSeconds + " seconds");
         }
         double elapsedSeconds = (System.nanoTime() - startedAt) / 1_000_000_000.0;
@@ -98,6 +100,7 @@ public class ChatHistoryHttpBenchmark {
                         "  \"averageMs\": %.2f,\n" +
                         "  \"p50Ms\": %.2f,\n" +
                         "  \"p95Ms\": %.2f,\n" +
+                        "  \"p99Ms\": %.2f,\n" +
                         "  \"maxMs\": %.2f,\n" +
                         "  \"averageResponseKilobytes\": %.2f\n" +
                         "}%n",
@@ -111,6 +114,7 @@ public class ChatHistoryHttpBenchmark {
                 averageLatency,
                 percentile(sortedLatencies, 50),
                 percentile(sortedLatencies, 95),
+                percentile(sortedLatencies, 99),
                 sortedLatencies.isEmpty() ? 0 : sortedLatencies.get(sortedLatencies.size() - 1),
                 averageResponseKilobytes);
 

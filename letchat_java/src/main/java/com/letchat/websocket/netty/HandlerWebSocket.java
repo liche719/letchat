@@ -2,6 +2,7 @@ package com.letchat.websocket.netty;
 
 import com.letchat.entity.dto.TokenUserInfoDto;
 import com.letchat.redis.RedisComponent;
+import com.letchat.metrics.ChatMetrics;
 import com.letchat.utils.StringTools;
 import com.letchat.websocket.ChannelContextUtils;
 import io.netty.channel.Channel;
@@ -14,7 +15,7 @@ import io.netty.handler.codec.http.websocketx.WebSocketServerProtocolHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 @Component
@@ -28,6 +29,9 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
     @Resource
     private ChannelContextUtils channelContextUtils;
 
+    @Resource
+    private ChatMetrics chatMetrics;
+
     /**
      * 用户初始化
      */
@@ -40,6 +44,7 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
     public void channelInactive(ChannelHandlerContext ctx) throws Exception {
         log.info("有连接断开...");
         channelContextUtils.removeContext(ctx.channel());
+        chatMetrics.webSocketDisconnected();
     }
 
 
@@ -61,28 +66,29 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
         if (evt instanceof WebSocketServerProtocolHandler.HandshakeComplete) {
             WebSocketServerProtocolHandler.HandshakeComplete complete = (WebSocketServerProtocolHandler.HandshakeComplete) evt;
             String uri = complete.requestUri();
-            String token = getToken(uri);
-            if (StringTools.isEmpty(token)) {
+            String ticket = getTicket(uri);
+            if (StringTools.isEmpty(ticket)) {
                 ctx.channel().close();
                 return;
             }
-            TokenUserInfoDto tokenUserInfoDto = redisComponent.getTokenUserInfoDto(token);
+            TokenUserInfoDto tokenUserInfoDto = redisComponent.consumeWebSocketTicket(ticket);
             if (null == tokenUserInfoDto) {
                 ctx.channel().close();
                 return;
             }
             channelContextUtils.addContext(tokenUserInfoDto.getUserId(), ctx.channel());
+            chatMetrics.webSocketConnected();
         }
     }
 
-    String getToken(String uri) {
+    String getTicket(String uri) {
         if (StringTools.isEmpty(uri)) {
             return null;
         }
-        List<String> tokens = new QueryStringDecoder(uri).parameters().get("token");
-        if (tokens == null || tokens.isEmpty()) {
+        List<String> tickets = new QueryStringDecoder(uri).parameters().get("ticket");
+        if (tickets == null || tickets.isEmpty()) {
             return null;
         }
-        return tokens.get(0);
+        return tickets.get(0);
     }
 }

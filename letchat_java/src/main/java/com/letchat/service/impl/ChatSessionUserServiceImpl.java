@@ -14,7 +14,7 @@ import com.letchat.service.ChatSessionUserService;
 import com.letchat.websocket.MessageHandler;
 import org.springframework.stereotype.Service;
 
-import javax.annotation.Resource;
+import jakarta.annotation.Resource;
 import java.util.List;
 
 

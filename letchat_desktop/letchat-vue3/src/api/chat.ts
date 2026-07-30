@@ -7,6 +7,7 @@ export interface SendMessageParams {
   contactId: string
   messageContent: string
   messageType: number
+  clientMessageId?: string
   fileSize?: number
   fileName?: string
   fileType?: number
@@ -31,6 +32,24 @@ export const chatApi = {
   loadChatMessage(contactId: string, pageNo = 1) {
     return request.post<unknown, ApiResponse<PaginationResult<BackendChatMessage>>>('/chat/loadChatMessage', null, {
       params: { contactId, pageNo },
+    })
+  },
+
+  syncMessages(contactId: string, afterSequence: number, limit = 200) {
+    return request.post<unknown, ApiResponse<BackendChatMessage[]>>('/chat/syncMessages', null, {
+      params: { contactId, afterSequence, limit },
+    })
+  },
+
+  acknowledgeDelivered(contactId: string, sequenceNo: number) {
+    return request.post<unknown, ApiResponse<null>>('/chat/ackDelivered', null, {
+      params: { contactId, sequenceNo },
+    })
+  },
+
+  acknowledgeRead(contactId: string, sequenceNo: number) {
+    return request.post<unknown, ApiResponse<null>>('/chat/ackRead', null, {
+      params: { contactId, sequenceNo },
     })
   },
 
