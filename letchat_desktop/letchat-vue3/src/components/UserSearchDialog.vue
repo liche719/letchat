@@ -22,17 +22,22 @@
         <el-button type="primary" size="large" :loading="loading" @click="search">搜索</el-button>
       </div>
 
-      <div v-if="result" class="result-row">
-        <div class="lc-avatar result-avatar">{{ resultName.slice(0, 2).toUpperCase() }}</div>
+      <div v-if="error" class="error-state" role="alert">
+        <strong>{{ error }}</strong>
+        <el-button size="small" @click="search">重试</el-button>
+      </div>
+
+      <div v-else-if="result" class="result-row">
+        <div class="lc-avatar result-avatar" :class="{ group: isGroupResult }">
+          {{ resultName.slice(0, 2).toUpperCase() }}
+        </div>
         <div class="result-main">
           <strong>{{ resultName }}</strong>
           <span>{{ result.contactId }}</span>
-          <small
-            >{{ result.areaName || '未设置地区' }} · {{ result.statusName || statusLabel }}</small
-          >
+          <small>{{ result.contactType === 'GROUP' || result.contactType === 'G' ? '群聊' : result.areaName || '未设置地区' }} · {{ result.statusName || statusLabel }}</small>
         </div>
-        <el-button type="primary" plain :disabled="result.status === 1" @click="openApply">
-          {{ result.status === 1 ? '已添加' : '申请' }}
+        <el-button type="primary" plain :disabled="!canApply" @click="openApply">
+          {{ resultActionLabel }}
         </el-button>
       </div>
 
@@ -58,16 +63,17 @@
         show-word-limit
         placeholder="简单介绍一下你是谁，方便对方通过申请"
       />
+      <p v-if="applyError" class="dialog-error" role="alert">{{ applyError }}</p>
       <template #footer>
         <el-button @click="applyVisible = false">取消</el-button>
-        <el-button type="primary" :loading="loading" @click="submitApply">发送</el-button>
+        <el-button type="primary" :loading="applying" @click="submitApply">发送</el-button>
       </template>
     </el-dialog>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
 import { Plus, Search } from '@element-plus/icons-vue'
 import { contactApi } from '@/api/contact'
@@ -88,47 +94,98 @@ const keyword = ref('')
 const result = ref<SearchResult | null>(null)
 const searched = ref(false)
 const loading = ref(false)
+const error = ref('')
 const applyVisible = ref(false)
 const applyInfo = ref('你好，我想添加你为联系人。')
+const applying = ref(false)
+const applyError = ref('')
+let searchRequestVersion = 0
 
 const resultName = computed(
   () => result.value?.nickName || result.value?.contactName || result.value?.contactId || '',
 )
-const statusLabel = computed(() => (result.value?.status === 1 ? '已是联系人' : '可申请'))
+const isGroupResult = computed(() => result.value?.contactType === 'GROUP' || result.value?.contactType === 'G')
+const statusCode = computed(() => Number(result.value?.status ?? 0))
+const canApply = computed(() => !result.value || ![1, 4, 5, 6].includes(statusCode.value))
+const statusLabel = computed(() => {
+  if (statusCode.value === 1) return '已是联系人'
+  if ([4, 5, 6].includes(statusCode.value)) return '暂不可申请'
+  if ([2, 3].includes(statusCode.value)) return '可重新申请'
+  return '可申请'
+})
+const resultActionLabel = computed(() => {
+  if (statusCode.value === 1) return '已添加'
+  if (!canApply.value) return '暂不可申请'
+  return isGroupResult.value ? '申请加入' : '申请'
+})
 
 async function search() {
-  if (!keyword.value.trim()) {
+  const query = keyword.value.trim()
+  if (!query) {
     ElMessage.warning('请输入搜索内容')
     return
   }
+  const requestVersion = ++searchRequestVersion
   loading.value = true
+  error.value = ''
+  result.value = null
+  searched.value = false
   try {
-    const response = await contactApi.searchContact(keyword.value.trim())
-    result.value = response.data || null
-    searched.value = true
+    const response = await contactApi.searchContact(query)
+    if (requestVersion === searchRequestVersion) {
+      result.value = response.data || null
+      searched.value = true
+    }
+  } catch {
+    if (requestVersion === searchRequestVersion) {
+      error.value = '搜索失败，请重试'
+      searched.value = true
+    }
   } finally {
-    loading.value = false
+    if (requestVersion === searchRequestVersion) loading.value = false
   }
 }
 
 function openApply() {
-  if (!result.value) return
+  if (!result.value || !canApply.value || applying.value) return
+  applyError.value = ''
   applyVisible.value = true
 }
 
 async function submitApply() {
-  if (!result.value) return
-  loading.value = true
+  if (!result.value || !canApply.value || applying.value) return
+  applying.value = true
+  applyError.value = ''
   try {
-    await contactApi.applyAdd(result.value.contactId, applyInfo.value)
-    ElMessage.success('申请已发送')
+    const response = await contactApi.applyAdd(result.value.contactId, applyInfo.value.trim())
+    const joinedDirectly = Number(response.data) === 0
+    ElMessage.success(joinedDirectly ? (isGroupResult.value ? '已加入群聊' : '已添加好友') : '申请已发送')
     applyVisible.value = false
     visible.value = false
     emit('friend-added')
+  } catch {
+    applyError.value = '操作失败，请稍后重试'
   } finally {
-    loading.value = false
+    applying.value = false
   }
 }
+
+function reset() {
+  searchRequestVersion += 1
+  keyword.value = ''
+  result.value = null
+  searched.value = false
+  loading.value = false
+  error.value = ''
+  applyVisible.value = false
+  applyInfo.value = '你好，我想添加你为联系人。'
+  applying.value = false
+  applyError.value = ''
+}
+
+watch(visible, (open) => {
+  if (!open) reset()
+})
 </script>
 
 <style scoped>
@@ -158,6 +215,12 @@ async function submitApply() {
 .result-avatar {
   width: 46px;
   height: 46px;
+}
+
+.result-avatar.group {
+  border-color: var(--lc-brass);
+  background: var(--lc-brass);
+  box-shadow: 0 0 0 3px var(--lc-brass-soft);
 }
 
 .result-main {
@@ -207,6 +270,30 @@ async function submitApply() {
 
 .empty-state.compact {
   min-height: 126px;
+}
+
+.error-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 126px;
+  padding: 24px;
+  border: 1px solid color-mix(in srgb, var(--lc-danger) 32%, var(--lc-line));
+  border-radius: 14px;
+  color: var(--lc-danger);
+  background: color-mix(in srgb, var(--lc-danger) 8%, var(--lc-surface));
+  text-align: center;
+}
+
+.error-state strong,
+.dialog-error {
+  color: var(--lc-danger);
+  font-size: 13px;
+}
+
+.dialog-error {
+  margin: 10px 0 0;
 }
 
 .mini-icon {

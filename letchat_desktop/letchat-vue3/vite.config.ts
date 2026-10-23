@@ -34,7 +34,8 @@ export default defineConfig({
       '/socket.io': {
         target: 'http://localhost:7071',
         changeOrigin: true,
-        ws: true
+        ws: true,
+        rewrite: (path) => path.replace(/^\/socket\.io/, '/ws')
       }
     }
   }

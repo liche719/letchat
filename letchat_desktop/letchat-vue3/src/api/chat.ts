@@ -15,7 +15,10 @@ export interface SendMessageParams {
 
 export const chatApi = {
   sendMessage(params: SendMessageParams) {
-    return request.post<unknown, ApiResponse<BackendChatMessage>>('/chat/sendMessage', null, { params })
+    return request.post<unknown, ApiResponse<BackendChatMessage>>('/chat/sendMessage', null, {
+      params,
+      silentError: true,
+    })
   },
 
   uploadFile(messageId: string, file: File, coverFile?: File) {
@@ -26,30 +29,35 @@ export const chatApi = {
 
     return request.post<unknown, ApiResponse<null>>('/chat/uploadFile', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      silentError: true,
     })
   },
 
   loadChatMessage(contactId: string, pageNo = 1) {
     return request.post<unknown, ApiResponse<PaginationResult<BackendChatMessage>>>('/chat/loadChatMessage', null, {
       params: { contactId, pageNo },
+      silentError: true,
     })
   },
 
   syncMessages(contactId: string, afterSequence: number, limit = 200) {
     return request.post<unknown, ApiResponse<BackendChatMessage[]>>('/chat/syncMessages', null, {
       params: { contactId, afterSequence, limit },
+      silentError: true,
     })
   },
 
   acknowledgeDelivered(contactId: string, sequenceNo: number) {
     return request.post<unknown, ApiResponse<null>>('/chat/ackDelivered', null, {
       params: { contactId, sequenceNo },
+      silentError: true,
     })
   },
 
   acknowledgeRead(contactId: string, sequenceNo: number) {
     return request.post<unknown, ApiResponse<null>>('/chat/ackRead', null, {
       params: { contactId, sequenceNo },
+      silentError: true,
     })
   },
 

@@ -3,7 +3,9 @@ import type { ApiResponse, UserInfo, WebSocketTicket } from '@/types/api'
 
 export const userApi = {
   getUserInfo() {
-    return request.post<unknown, ApiResponse<UserInfo>>('/userInfo/getUserInfo')
+    return request.post<unknown, ApiResponse<UserInfo>>('/userInfo/getUserInfo', null, {
+      silentError: true,
+    })
   },
 
   saveUserInfo(userInfo: Partial<UserInfo>) {
@@ -16,6 +18,7 @@ export const userApi = {
 
     return request.post<unknown, ApiResponse<UserInfo>>('/userInfo/saveUserInfo', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
+      silentError: true,
     })
   },
 

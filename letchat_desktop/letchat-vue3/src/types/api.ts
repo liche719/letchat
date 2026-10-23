@@ -142,7 +142,7 @@ export interface BackendChatMessage {
   sendTime?: number
   contactId?: string
   contactName?: string
-  contactType?: number
+  contactType?: number | string
   fileSize?: number
   fileName?: string
   fileType?: number
@@ -171,6 +171,7 @@ export interface ChatMessage {
   fileSize?: number
   fileName?: string
   fileType?: number
+  memberCount?: number
   extendData?: unknown
 }
 

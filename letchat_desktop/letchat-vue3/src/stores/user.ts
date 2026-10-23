@@ -7,6 +7,7 @@ import { TOKEN_KEY } from '@/utils/request'
 import type { UserInfo, WsMessage } from '@/types/api'
 
 const USER_KEY = 'letchat_user'
+const SESSION_EXPIRED_EVENT = 'letchat:session-expired'
 type Timer = ReturnType<typeof setTimeout>
 type SocketListener = (message: WsMessage) => void
 
@@ -36,6 +37,7 @@ export const useUserStore = defineStore('user', () => {
   let reconnectTimer: Timer | null = null
   let heartbeatTimer: Timer | null = null
   let socketConnectPromise: Promise<void> | null = null
+  let socketRequestVersion = 0
 
   function persistSession(nextToken: string, nextUser: UserInfo) {
     token.value = nextToken
@@ -53,9 +55,25 @@ export const useUserStore = defineStore('user', () => {
     localStorage.removeItem(USER_KEY)
   }
 
+  function handleSessionExpired(message = '登录状态已失效，请重新登录') {
+    const hadSession = Boolean(token.value || userInfo.value)
+    disconnectSocket()
+    clearSession()
+    if (hadSession) ElMessage.error(message)
+  }
+
+  function handleSessionExpiredEvent(event: Event) {
+    const detail = (event as CustomEvent<{ message?: string }>).detail
+    handleSessionExpired(detail?.message)
+  }
+
   function notifySocketMessage(raw: string) {
     try {
       const message = JSON.parse(raw) as WsMessage
+      if (Number(message.messageType) === 7) {
+        handleSessionExpired('账号已在其他设备登录，请重新登录')
+        return
+      }
       listeners.forEach((listener) => listener(message))
     } catch (error) {
       console.warn('WebSocket 消息解析失败', error, raw)
@@ -97,7 +115,17 @@ export const useUserStore = defineStore('user', () => {
     }, delay)
   }
 
+  function resolveWebSocketUrl(baseUrl: string) {
+    const rawUrl = baseUrl.trim() || '/socket.io'
+    const url = new URL(rawUrl, window.location.href)
+    if (url.protocol === 'http:') url.protocol = 'ws:'
+    if (url.protocol === 'https:') url.protocol = 'wss:'
+    return url.toString()
+  }
+
   function disconnectSocket() {
+    socketRequestVersion += 1
+    socketConnectPromise = null
     stopHeartbeat()
     if (reconnectTimer) {
       clearTimeout(reconnectTimer)
@@ -120,50 +148,64 @@ export const useUserStore = defineStore('user', () => {
     if (socket.value?.readyState === WebSocket.OPEN || socket.value?.readyState === WebSocket.CONNECTING) return
 
     if (socketConnectPromise) return socketConnectPromise
-    socketConnectPromise = openSocket().finally(() => {
-      socketConnectPromise = null
+    const requestVersion = socketRequestVersion
+    const connectionToken = token.value
+    socketConnectPromise = openSocket(connectionToken, requestVersion).finally(() => {
+      if (socketRequestVersion === requestVersion) socketConnectPromise = null
     })
     return socketConnectPromise
   }
 
-  async function openSocket() {
+  async function openSocket(connectionToken: string, requestVersion: number) {
     try {
       socketStatus.value = 'connecting'
       const response = await userApi.createWebSocketTicket()
-      if (!token.value) return
+      if (
+        !token.value ||
+        token.value !== connectionToken ||
+        socketRequestVersion !== requestVersion
+      ) return
 
-      const wsBase = import.meta.env.VITE_WS_BASE_URL || '/socket.io'
+      const wsBase = resolveWebSocketUrl(import.meta.env.VITE_WS_BASE_URL || '/socket.io')
       const separator = wsBase.includes('?') ? '&' : '?'
-      socket.value = new WebSocket(
+      const nextSocket = new WebSocket(
         `${wsBase}${separator}ticket=${encodeURIComponent(response.data.ticket)}`,
       )
+      socket.value = nextSocket
 
-      socket.value.onopen = () => {
+      nextSocket.onopen = () => {
+        if (socket.value !== nextSocket) return
         isOnline.value = true
         socketStatus.value = 'open'
         reconnectAttempts = 0
         startHeartbeat()
       }
 
-      socket.value.onmessage = (event) => {
+      nextSocket.onmessage = (event) => {
+        if (socket.value !== nextSocket) return
         notifySocketMessage(event.data)
       }
 
-      socket.value.onerror = () => {
+      nextSocket.onerror = () => {
+        if (socket.value !== nextSocket) return
         isOnline.value = false
         socketStatus.value = 'error'
       }
 
-      socket.value.onclose = (event) => {
+      nextSocket.onclose = () => {
+        if (socket.value !== nextSocket) return
         stopHeartbeat()
         isOnline.value = false
         socketStatus.value = 'closed'
         socket.value = null
-        if (event.code !== 1000) {
-          scheduleReconnect()
-        }
+        scheduleReconnect()
       }
     } catch {
+      if (
+        !token.value ||
+        token.value !== connectionToken ||
+        socketRequestVersion !== requestVersion
+      ) return
       isOnline.value = false
       socketStatus.value = 'error'
       scheduleReconnect()
@@ -211,6 +253,10 @@ export const useUserStore = defineStore('user', () => {
     return authApi.getCheckCode()
   }
 
+  if (typeof window !== 'undefined') {
+    window.addEventListener(SESSION_EXPIRED_EVENT, handleSessionExpiredEvent)
+  }
+
   return {
     token,
     userInfo,
@@ -227,5 +273,6 @@ export const useUserStore = defineStore('user', () => {
     disconnectSocket,
     addSocketListener,
     getCheckCode,
+    handleSessionExpired,
   }
 })

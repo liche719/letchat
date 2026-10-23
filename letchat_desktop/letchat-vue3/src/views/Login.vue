@@ -1,5 +1,5 @@
 <template>
-  <main class="auth-shell">
+  <main id="main-content" class="auth-shell" tabindex="-1">
     <AuthPreview />
 
     <section class="auth-console">

@@ -6,6 +6,8 @@
       class="contact-row"
       :class="{ active: selectedContact?.contactId === contact.contactId }"
       type="button"
+      :aria-current="selectedContact?.contactId === contact.contactId ? 'true' : undefined"
+      :aria-label="contactLabel(contact)"
       @click="$emit('select-contact', contact)"
     >
       <div class="lc-avatar avatar" :class="{ group: contact.contactType === 'G' }">
@@ -30,28 +32,51 @@
       }}</span>
     </button>
 
-    <div v-if="contacts.length === 0" class="empty">
+    <div v-if="loading" class="state" role="status" aria-live="polite">
+      <Loading class="state-icon spinning" />
+      <strong>联系人加载中…</strong>
+      <span>正在同步你的联系人和群聊</span>
+    </div>
+
+    <div v-else-if="error" class="state error-state" role="alert">
+      <div class="empty-mark">
+        <WarningFilled />
+      </div>
+      <strong>{{ error }}</strong>
+      <button class="retry-button" type="button" @click="$emit('retry')">重试</button>
+    </div>
+
+    <div v-else-if="contacts.length === 0" class="empty">
       <div class="empty-mark">
         <ChatDotRound />
       </div>
-      <strong>暂无联系人</strong>
-      <span>添加好友或加入群聊后，会话会显示在这里。</span>
+      <strong>{{ hasFilter ? '没有匹配的联系人' : '暂无联系人' }}</strong>
+      <span>{{ hasFilter ? '换个关键词或筛选条件试试。' : '添加好友或加入群聊后，会话会显示在这里。' }}</span>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ChatDotRound, UserFilled } from '@element-plus/icons-vue'
+import { ChatDotRound, Loading, UserFilled, WarningFilled } from '@element-plus/icons-vue'
 import type { ContactInfo } from '@/types/api'
 
 defineProps<{
   contacts: ContactInfo[]
   selectedContact: ContactInfo | null
+  loading: boolean
+  error: string
+  hasFilter: boolean
 }>()
 
 defineEmits<{
   'select-contact': [contact: ContactInfo]
+  retry: []
 }>()
+
+function contactLabel(contact: ContactInfo) {
+  const unread = contact.unreadCount ? `，${contact.unreadCount} 条未读消息` : ''
+  return `${contact.contactName}${unread}`
+}
 
 function seed(name: string) {
   return name?.slice(0, 2).toUpperCase() || 'LC'
@@ -205,6 +230,70 @@ function formatTime(value?: string | number) {
   text-align: center;
 }
 
+.state {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 9px;
+  min-height: 260px;
+  padding: 34px 22px;
+  color: var(--lc-soft);
+  text-align: center;
+}
+
+.state strong {
+  margin-top: 8px;
+  color: var(--lc-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.state span {
+  max-width: 220px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+
+.state-icon {
+  width: 22px;
+  height: 22px;
+  color: var(--lc-accent);
+}
+
+.spinning {
+  animation: contact-list-spin 900ms linear infinite;
+}
+
+.error-state {
+  color: var(--lc-danger);
+}
+
+.error-state .empty-mark {
+  color: var(--lc-danger);
+}
+
+.retry-button {
+  padding: 6px 12px;
+  border: 1px solid var(--lc-line-strong);
+  border-radius: 8px;
+  color: var(--lc-accent);
+  background: var(--lc-control-bg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.retry-button:hover {
+  border-color: var(--lc-accent);
+  background: var(--lc-accent-soft);
+}
+
+.retry-button:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+
 .empty-mark {
   position: relative;
   display: grid;
@@ -241,5 +330,9 @@ function formatTime(value?: string | number) {
   max-width: 190px;
   font-size: 12px;
   line-height: 1.6;
+}
+
+@keyframes contact-list-spin {
+  to { transform: rotate(360deg); }
 }
 </style>

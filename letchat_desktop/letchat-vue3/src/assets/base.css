@@ -126,6 +126,25 @@ body,
   min-height: 100%;
 }
 
+.skip-link {
+  position: fixed;
+  top: -100px;
+  left: 16px;
+  z-index: 3000;
+  padding: 9px 13px;
+  border: 1px solid var(--lc-accent);
+  border-radius: 9px;
+  color: var(--lc-on-accent);
+  background: var(--lc-accent);
+  box-shadow: var(--lc-shadow-soft);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.skip-link:focus {
+  top: 12px;
+}
+
 html {
   background: var(--lc-bg);
   -webkit-tap-highlight-color: transparent;

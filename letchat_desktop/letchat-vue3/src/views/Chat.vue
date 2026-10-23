@@ -1,11 +1,25 @@
 <template>
-  <main class="chat-shell" :class="{ 'has-active-contact': chatStore.currentContact }">
+    <main
+      id="main-content"
+      class="chat-shell"
+      :class="{ 'has-active-contact': chatStore.currentContact }"
+      tabindex="-1"
+    >
     <aside class="sidebar">
       <div class="sidebar-mapbar">
         <div class="sidebar-heading">
           <strong>消息</strong>
           <span v-if="chatStore.unreadTotal">{{ chatStore.unreadTotal }} 条未读</span>
         </div>
+          <span
+            class="connection-status"
+            :class="`is-${userStore.socketStatus}`"
+            role="status"
+            aria-live="polite"
+          >
+            <span class="connection-dot" aria-hidden="true"></span>
+            {{ connectionLabel }}
+          </span>
         <ThemeToggle />
       </div>
 
@@ -60,6 +74,15 @@
         </div>
       </header>
 
+      <div
+        v-if="userStore.socketStatus === 'error' || userStore.socketStatus === 'closed'"
+        class="connection-banner"
+        role="alert"
+      >
+        <span>{{ connectionLabel }}，新消息可能会延迟到达</span>
+        <button type="button" @click="reconnectSocket">重新连接</button>
+      </div>
+
       <div class="search-area">
         <el-input
           v-model="chatStore.keyword"
@@ -72,10 +95,19 @@
         <el-segmented v-model="chatStore.activeFilter" :options="filterOptions" block />
       </div>
 
+      <div v-if="chatStore.offlineSyncError" class="sync-banner" role="status">
+        <span>{{ chatStore.offlineSyncError }}</span>
+        <button type="button" @click="retryOfflineSync">重试</button>
+      </div>
+
       <ContactList
         :contacts="chatStore.filteredContacts"
         :selected-contact="chatStore.currentContact"
+        :loading="chatStore.loadingContacts"
+        :error="chatStore.contactsError"
+        :has-filter="hasContactFilter"
         @select-contact="selectContact"
+        @retry="reloadContacts"
       />
     </aside>
 
@@ -87,7 +119,7 @@
               class="lc-icon-button mobile-back"
               type="button"
               aria-label="返回会话列表"
-              @click="chatStore.clearCurrentContact()"
+              @click="clearSelectedContact"
             >
               <ArrowLeft />
             </button>
@@ -118,7 +150,16 @@
           </div>
         </header>
 
-        <div ref="messageListRef" class="message-list" v-loading="chatStore.loadingMessages">
+        <div
+          ref="messageListRef"
+          class="message-list"
+          v-loading="chatStore.loadingMessages"
+          role="log"
+          aria-live="polite"
+          aria-relevant="additions text"
+          :aria-label="`与${chatStore.currentContact.contactName}的消息`"
+          @scroll="handleMessageScroll"
+        >
           <div v-if="chatStore.messages.length" class="history-action">
             <el-button
               text
@@ -129,6 +170,10 @@
               {{ chatStore.hasMoreMessages ? '加载更早消息' : '没有更早消息了' }}
             </el-button>
           </div>
+          <div v-if="chatStore.messageError" class="message-error" role="alert">
+            <span>{{ chatStore.messageError }}</span>
+            <button type="button" @click="retryMessages">重试</button>
+          </div>
           <MessageBubble
             v-for="message in chatStore.messages"
             :key="message.localId || message.messageId"
@@ -138,7 +183,7 @@
           />
 
           <div
-            v-if="!chatStore.loadingMessages && chatStore.messages.length === 0"
+            v-if="!chatStore.loadingMessages && !chatStore.messageError && chatStore.messages.length === 0"
             class="empty-chat"
           >
             <div class="empty-chip">
@@ -148,6 +193,17 @@
             <span>发一条消息，和对方打个招呼吧。</span>
           </div>
         </div>
+
+        <button
+          v-if="showNewMessages"
+          class="new-message-pill"
+          type="button"
+          aria-label="跳转到最新消息"
+          @click="scrollToBottom('smooth')"
+        >
+          <ArrowDown aria-hidden="true" />
+          新消息
+        </button>
 
         <footer class="composer">
           <div class="composer-tools">
@@ -220,7 +276,7 @@
     </section>
 
     <UserSearchDialog v-model="searchVisible" @friend-added="reloadContacts" />
-    <FriendApplyList v-model="applyVisible" @apply-processed="reloadContacts" />
+    <FriendApplyList v-model="applyVisible" @apply-processed="handleApplyProcessed" />
     <ContactInfoDialog
       v-model="contactInfoVisible"
       :contact="chatStore.currentContact"
@@ -228,16 +284,37 @@
       @edit-group="editGroup"
     />
     <GroupEditorDialog v-model="groupEditorVisible" :group="editingGroup" @saved="afterGroupSaved" />
-    <UserProfileDialog v-model="profileVisible" @profile-updated="userStore.refreshUserInfo" />
+    <UserProfileDialog v-model="profileVisible" @profile-updated="handleProfileUpdated" />
+    <el-dialog
+      v-model="mediaPreviewVisible"
+      :title="mediaPreviewName"
+      width="min(720px, calc(100vw - 24px))"
+      destroy-on-close
+      class="media-preview-dialog"
+      @closed="releaseMediaPreview"
+    >
+      <img
+        v-if="mediaPreviewKind === 'image'"
+        :src="mediaPreviewUrl"
+        :alt="mediaPreviewName"
+        class="media-preview-image"
+      />
+      <video v-else :src="mediaPreviewUrl" class="media-preview-video" controls playsinline />
+      <template #footer>
+        <el-button @click="mediaPreviewVisible = false">关闭</el-button>
+        <el-button type="primary" @click="downloadPreview">下载</el-button>
+      </template>
+    </el-dialog>
   </main>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { ElMessage, ElMessageBox } from 'element-plus'
 import {
   ArrowLeft,
+  ArrowDown,
   Bell,
   ChatLineRound,
   InfoFilled,
@@ -263,10 +340,26 @@ import type { ChatMessage, ContactInfo, GroupInfo } from '@/types/api'
 defineOptions({ name: 'ChatView' })
 
 const router = useRouter()
+const route = useRoute()
 const userStore = useUserStore()
 const chatStore = useChatStore()
 
-const messageText = ref('')
+const DRAFT_KEY_PREFIX = 'letchat_drafts:'
+const drafts = ref<Record<string, string>>({})
+const messageText = computed({
+  get: () => {
+    const contactId = chatStore.currentContact?.contactId
+    return contactId ? drafts.value[contactId] || '' : ''
+  },
+  set: (value: string) => {
+    const contactId = chatStore.currentContact?.contactId
+    if (contactId) {
+      drafts.value[contactId] = value
+      persistDrafts()
+    }
+  },
+})
+let contactsReady = false
 const searchVisible = ref(false)
 const applyVisible = ref(false)
 const contactInfoVisible = ref(false)
@@ -275,6 +368,12 @@ const groupEditorVisible = ref(false)
 const editingGroup = ref<GroupInfo | null>(null)
 const messageListRef = ref<HTMLElement | null>(null)
 const fileInputRef = ref<HTMLInputElement | null>(null)
+const showNewMessages = ref(false)
+const preservingHistoryScroll = ref(false)
+const mediaPreviewVisible = ref(false)
+const mediaPreviewUrl = ref('')
+const mediaPreviewName = ref('')
+const mediaPreviewKind = ref<'image' | 'video' | null>(null)
 
 const filterOptions = [
   { label: '全部', value: 'all' },
@@ -289,28 +388,135 @@ const conversationSubtitle = computed(() => {
   if (contact.contactType !== 'G') return '好友'
   return contact.memberCount ? `${contact.memberCount} 位成员` : '群聊'
 })
+const hasContactFilter = computed(() => Boolean(chatStore.keyword.trim()) || chatStore.activeFilter !== 'all')
 
-function scrollToBottom() {
+const connectionLabel = computed(() => {
+  if (userStore.socketStatus === 'open') return '实时在线'
+  if (userStore.socketStatus === 'connecting') return '连接中…'
+  if (userStore.socketStatus === 'error') return '连接异常'
+  if (userStore.socketStatus === 'closed') return '已断开'
+  return '等待连接'
+})
+
+function scrollToBottom(behavior: ScrollBehavior = 'auto') {
   nextTick(() => {
     const node = messageListRef.value
-    if (node) node.scrollTop = node.scrollHeight
+    if (node) node.scrollTo({ top: node.scrollHeight, behavior })
+    showNewMessages.value = false
   })
 }
 
+function draftStorageKey() {
+  const userId = userStore.userInfo?.userId
+  return userId ? `${DRAFT_KEY_PREFIX}${userId}` : ''
+}
+
+function loadDrafts() {
+  drafts.value = {}
+  const key = draftStorageKey()
+  if (!key) return
+  try {
+    const parsed = JSON.parse(localStorage.getItem(key) || '{}') as Record<string, unknown>
+    drafts.value = Object.fromEntries(
+      Object.entries(parsed).filter(([, value]) => typeof value === 'string'),
+    ) as Record<string, string>
+  } catch {
+    localStorage.removeItem(key)
+  }
+}
+
+function persistDrafts() {
+  const key = draftStorageKey()
+  if (!key) return
+  const stored = Object.fromEntries(
+    Object.entries(drafts.value).filter(([, value]) => value.length > 0),
+  )
+  if (Object.keys(stored).length) localStorage.setItem(key, JSON.stringify(stored))
+  else localStorage.removeItem(key)
+}
+
+function routeContactId() {
+  return typeof route.query.contact === 'string' ? route.query.contact : ''
+}
+
+function updateContactQuery(contactId: string | null) {
+  const currentContactQuery = route.query.contact
+  const nextContactQuery = contactId || undefined
+  if (currentContactQuery === nextContactQuery) return
+  const query = { ...route.query }
+  if (nextContactQuery) query.contact = nextContactQuery
+  else delete query.contact
+  void router.replace({ query })
+}
+
+function isNearBottom(node: HTMLElement) {
+  return node.scrollHeight - node.scrollTop - node.clientHeight < 96
+}
+
+function handleMessageScroll() {
+  const node = messageListRef.value
+  if (node && isNearBottom(node)) showNewMessages.value = false
+}
+
+function reconnectSocket() {
+  userStore.disconnectSocket()
+  userStore.connectSocket()
+}
+
 async function selectContact(contact: ContactInfo) {
+  updateContactQuery(contact.contactId)
+  if (chatStore.currentContact?.contactId === contact.contactId && !chatStore.messageError) return
+  showNewMessages.value = false
   await chatStore.setCurrentContact(contact)
   scrollToBottom()
+}
+
+function clearSelectedContact() {
+  chatStore.clearCurrentContact()
+  updateContactQuery(null)
+}
+
+async function restoreContactFromRoute() {
+  if (!contactsReady) return
+  const contactId = routeContactId()
+  if (!contactId) {
+    if (chatStore.currentContact) chatStore.clearCurrentContact()
+    return
+  }
+  const contact = chatStore.contacts.find((item) => item.contactId === contactId)
+  if (contact) {
+    await selectContact(contact)
+    return
+  }
+  clearSelectedContact()
 }
 
 async function loadOlderMessages() {
   const node = messageListRef.value
   const previousHeight = node?.scrollHeight || 0
-  await chatStore.loadOlderMessages()
-  await nextTick()
-  if (node) node.scrollTop = node.scrollHeight - previousHeight
+  const previousTop = node?.scrollTop || 0
+  preservingHistoryScroll.value = true
+  try {
+    await chatStore.loadOlderMessages()
+    await nextTick()
+    if (node) node.scrollTop = previousTop + node.scrollHeight - previousHeight
+  } finally {
+    preservingHistoryScroll.value = false
+  }
+}
+
+async function retryMessages() {
+  const hadMessages = chatStore.messages.length > 0
+  await chatStore.retryCurrentMessages()
+  if (!hadMessages) scrollToBottom()
+}
+
+function retryOfflineSync() {
+  void chatStore.retryOfflineSync()
 }
 
 async function sendText() {
+  const contactId = chatStore.currentContact?.contactId
   const content = messageText.value
   if (!content.trim()) return
   messageText.value = ''
@@ -318,12 +524,15 @@ async function sendText() {
     await chatStore.sendMessage(content)
     scrollToBottom()
   } catch {
+    if (chatStore.currentContact?.contactId === contactId && !messageText.value.trim()) {
+      messageText.value = content
+    }
     ElMessage.error('消息发送失败，请检查网络后重试')
   }
 }
 
 function handleEnter(event: KeyboardEvent) {
-  if (event.shiftKey) return
+  if (event.shiftKey || event.isComposing || event.keyCode === 229) return
   event.preventDefault()
   sendText()
 }
@@ -353,12 +562,18 @@ async function reloadContacts() {
   await chatStore.loadContacts()
 }
 
-async function afterContactChanged() {
-  chatStore.clearCurrentContact()
+async function handleApplyProcessed() {
+  chatStore.markApplyProcessed()
+  await reloadContacts()
+}
+
+async function afterContactChanged(options: { removeCurrent?: boolean } = {}) {
+  if (options.removeCurrent) chatStore.clearCurrentContact()
   await reloadContacts()
 }
 
 function editGroup(group: GroupInfo | null) {
+  contactInfoVisible.value = false
   editingGroup.value = group
   groupEditorVisible.value = true
 }
@@ -378,6 +593,42 @@ async function afterGroupSaved() {
   }
 }
 
+async function handleProfileUpdated() {
+  try {
+    await userStore.refreshUserInfo()
+  } catch {
+    if (userStore.isLoggedIn) ElMessage.warning('资料已保存，但最新信息同步失败，请稍后刷新页面')
+  }
+}
+
+function isImageFile(fileName?: string) {
+  return /\.(png|jpe?g|gif|webp|bmp)$/i.test(fileName || '')
+}
+
+function isVideoFile(fileName?: string) {
+  return /\.(mp4|webm|mov|m4v|avi)$/i.test(fileName || '')
+}
+
+function triggerDownload(url: string, fileName: string, revoke = true) {
+  const link = document.createElement('a')
+  link.href = url
+  link.download = fileName
+  link.click()
+  if (revoke) window.setTimeout(() => URL.revokeObjectURL(url), 1000)
+}
+
+function releaseMediaPreview() {
+  if (mediaPreviewUrl.value) URL.revokeObjectURL(mediaPreviewUrl.value)
+  mediaPreviewUrl.value = ''
+  mediaPreviewName.value = ''
+  mediaPreviewKind.value = null
+}
+
+function downloadPreview() {
+  if (!mediaPreviewUrl.value) return
+  triggerDownload(mediaPreviewUrl.value, mediaPreviewName.value || 'letchat-media', false)
+}
+
 async function downloadFile(message: ChatMessage) {
   if (!message.messageId || message.messageId.startsWith('local-')) {
     ElMessage.warning('文件还未上传完成，请稍后再试')
@@ -386,11 +637,16 @@ async function downloadFile(message: ChatMessage) {
   try {
     const blob = await chatApi.downloadFile(message.messageId)
     const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = message.fileName || '聊天文件'
-    link.click()
-    URL.revokeObjectURL(url)
+    const fileName = message.fileName || 'letchat-media'
+    if (isImageFile(fileName) || isVideoFile(fileName)) {
+      releaseMediaPreview()
+      mediaPreviewUrl.value = url
+      mediaPreviewName.value = fileName
+      mediaPreviewKind.value = isImageFile(fileName) ? 'image' : 'video'
+      mediaPreviewVisible.value = true
+      return
+    }
+    triggerDownload(url, fileName)
   } catch {
     ElMessage.error('文件下载失败，请稍后重试')
   }
@@ -403,24 +659,75 @@ async function logout() {
     return
   }
   await userStore.logout()
-  router.push('/login')
+  if (router.currentRoute.value.path !== '/login') await router.replace('/login')
 }
 
 onMounted(async () => {
-  if (!userStore.userInfo) {
-    await userStore.refreshUserInfo().catch(() => null)
+  await userStore.refreshUserInfo().catch(() => null)
+  if (!userStore.isLoggedIn) {
+    await router.replace('/login')
+    return
   }
+  loadDrafts()
   chatStore.attachSocket()
   await chatStore.loadContacts()
+  contactsReady = true
+  await restoreContactFromRoute()
 })
 
 onBeforeUnmount(() => {
+  contactsReady = false
   chatStore.detachSocket()
+  userStore.disconnectSocket()
+  releaseMediaPreview()
 })
 
 watch(
-  () => chatStore.messages.length,
-  () => scrollToBottom(),
+  () => userStore.userInfo?.userId,
+  () => loadDrafts(),
+)
+
+watch(
+  () => userStore.isLoggedIn,
+  (loggedIn) => {
+    if (loggedIn || router.currentRoute.value.path === '/login') return
+    chatStore.clearCurrentContact()
+    void router.replace('/login')
+  },
+)
+
+watch(
+  () => route.query.contact,
+  () => {
+    void restoreContactFromRoute()
+  },
+)
+
+watch(
+  () => [chatStore.currentContact?.contactId || '', chatStore.messages.length] as const,
+  ([contactId, messageCount], previous) => {
+    const [previousContactId, previousMessageCount] = previous || ['', 0]
+    if (contactId !== previousContactId) {
+      showNewMessages.value = false
+      if (contactsReady && !contactId && routeContactId()) updateContactQuery(null)
+      scrollToBottom()
+      return
+    }
+    if (
+      preservingHistoryScroll.value ||
+      chatStore.loadingOlderMessages ||
+      messageCount <= previousMessageCount
+    ) {
+      return
+    }
+    const node = messageListRef.value
+    if (!node || isNearBottom(node)) {
+      scrollToBottom()
+    } else {
+      showNewMessages.value = true
+    }
+  },
+  { flush: 'post' },
 )
 </script>
 
@@ -429,7 +736,8 @@ watch(
   display: grid;
   grid-template-columns: 326px minmax(0, 1fr);
   gap: 12px;
-  height: 100vh;
+  min-height: 100vh;
+  height: 100dvh;
   padding: 12px;
   background:
     radial-gradient(
@@ -658,6 +966,7 @@ watch(
     ),
     var(--lc-surface-subtle);
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .history-action {
@@ -970,6 +1279,167 @@ watch(
   .composer-row .el-button {
     padding-right: 10px;
     padding-left: 10px;
+  }
+}
+
+.connection-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  color: var(--lc-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.connection-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--lc-soft);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lc-soft) 13%, transparent);
+}
+
+.connection-status.is-open {
+  color: var(--lc-accent);
+}
+
+.connection-status.is-open .connection-dot {
+  background: var(--lc-accent);
+  box-shadow: 0 0 0 3px var(--lc-accent-soft);
+}
+
+.connection-status.is-error,
+.connection-status.is-closed {
+  color: var(--lc-danger);
+}
+
+.connection-status.is-error .connection-dot,
+.connection-status.is-closed .connection-dot {
+  background: var(--lc-danger);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--lc-danger) 13%, transparent);
+}
+
+.connection-banner,
+.sync-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 9px;
+  margin: 10px 12px 0;
+  padding: 8px 10px;
+  border: 1px solid color-mix(in srgb, var(--lc-danger) 32%, var(--lc-line));
+  border-radius: 10px;
+  color: var(--lc-danger);
+  background: color-mix(in srgb, var(--lc-danger) 8%, var(--lc-surface));
+  font-size: 11px;
+}
+
+.sync-banner {
+  border-color: color-mix(in srgb, var(--lc-brass) 32%, var(--lc-line));
+  color: var(--lc-brass);
+  background: var(--lc-brass-soft);
+}
+
+.connection-banner button,
+.sync-banner button,
+.message-error button {
+  flex: 0 0 auto;
+  padding: 4px 7px;
+  border: 1px solid currentColor;
+  border-radius: 7px;
+  color: inherit;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.connection-banner button:hover,
+.sync-banner button:hover,
+.message-error button:hover {
+  background: color-mix(in srgb, currentColor 10%, transparent);
+}
+
+.connection-banner button:focus-visible,
+.sync-banner button:focus-visible,
+.message-error button:focus-visible,
+.new-message-pill:focus-visible {
+  outline: 2px solid var(--lc-focus);
+  outline-offset: 2px;
+}
+
+.message-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin: 6px auto 12px;
+  color: var(--lc-danger);
+  font-size: 12px;
+}
+
+.new-message-pill {
+  position: absolute;
+  right: 22px;
+  bottom: 86px;
+  z-index: 2;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 7px 11px;
+  border: 1px solid var(--lc-accent);
+  border-radius: 999px;
+  color: var(--lc-on-accent);
+  background: var(--lc-accent);
+  box-shadow: var(--lc-shadow-soft);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.new-message-pill:hover {
+  background: var(--lc-accent-dark);
+  transform: translateY(-1px);
+}
+
+.new-message-pill svg {
+  width: 14px;
+  height: 14px;
+}
+
+.media-preview-dialog :deep(.el-dialog__body) {
+  display: grid;
+  place-items: center;
+  min-height: 180px;
+  padding: 12px 20px 20px;
+  background: var(--lc-surface-subtle);
+}
+
+.media-preview-image,
+.media-preview-video {
+  display: block;
+  max-width: 100%;
+  max-height: min(62vh, 620px);
+  border-radius: 10px;
+  object-fit: contain;
+}
+
+@media (max-width: 760px) {
+  .connection-status {
+    font-size: 10px;
+  }
+
+  .connection-banner,
+  .sync-banner {
+    margin-right: 10px;
+    margin-left: 10px;
+  }
+
+  .new-message-pill {
+    right: 12px;
+    bottom: 98px;
   }
 }
 </style>

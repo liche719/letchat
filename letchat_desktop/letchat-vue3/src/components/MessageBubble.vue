@@ -10,7 +10,12 @@
       <div class="sender" v-if="!isMine">{{ message.senderName }}</div>
       <div class="bubble">
         <template v-if="message.messageType === 5">
-          <button class="file-block" type="button" @click="$emit('download-file', message)">
+          <button
+            class="file-block"
+            type="button"
+            :aria-label="fileActionLabel"
+            @click="$emit('download-file', message)"
+          >
             <Picture v-if="isImageFile" :size="20" />
             <Document v-else :size="20" />
             <div>
@@ -27,12 +32,29 @@
       <div class="meta">
         <span>{{ formatTime(message.sendTime) }}</span>
         <template v-if="isMine">
-          <Loading v-if="message.sendStatus === 'sending'" class="status sending" />
-          <Check v-else-if="message.sendStatus === 'sent'" class="status sent" />
+          <span
+            v-if="message.sendStatus === 'sending'"
+            class="status sending"
+            role="status"
+            aria-label="发送中…"
+            title="发送中…"
+          >
+            <Loading />
+          </span>
+          <span
+            v-else-if="message.sendStatus === 'sent'"
+            class="status sent"
+            role="status"
+            aria-label="已发送"
+            title="已发送"
+          >
+            <Check />
+          </span>
           <button
             v-else-if="message.sendStatus === 'failed'"
             type="button"
             class="retry"
+            aria-label="发送失败，点击重试"
             @click="$emit('retry-message', message)"
           >
             <CircleClose :size="14" />
@@ -60,13 +82,17 @@ defineEmits<{
 }>()
 
 const userStore = useUserStore()
-const systemTypes = new Set([1, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13])
+const systemTypes = new Set([1, 3, 4, 6, 7, 8, 9, 10, 11, 12, 13, 14])
 
 const isMine = computed(() => props.message.senderId === userStore.userInfo?.userId)
 const isSystemMessage = computed(() => systemTypes.has(props.message.messageType))
 const avatarSeed = computed(() => props.message.senderName?.slice(0, 2).toUpperCase() || 'LC')
 const isImageFile = computed(() =>
   /\.(png|jpe?g|gif|webp|bmp)$/i.test(props.message.fileName || ''),
+)
+const isVideoFile = computed(() => /\.(mp4|webm|mov|m4v|avi)$/i.test(props.message.fileName || ''))
+const fileActionLabel = computed(() =>
+  isImageFile.value || isVideoFile.value ? '预览媒体文件' : '下载文件',
 )
 
 const systemText = computed(() => {
@@ -83,12 +109,19 @@ const systemText = computed(() => {
     11: '有成员退出群聊',
     12: '有成员被移出群聊',
     13: '好友申请消息',
+    14: '联系人关系已变更',
   }
   return label[props.message.messageType] || '系统消息'
 })
 
 function formatTime(value: number) {
-  return new Date(value).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+  const date = new Date(value)
+  const now = new Date()
+  const sameDay = date.toDateString() === now.toDateString()
+  return new Intl.DateTimeFormat('zh-CN', sameDay
+    ? { hour: '2-digit', minute: '2-digit' }
+    : { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' },
+  ).format(date)
 }
 
 function formatFileSize(bytes?: number) {
@@ -226,6 +259,13 @@ function formatFileSize(bytes?: number) {
 }
 
 .status {
+  display: inline-grid;
+  place-items: center;
+  width: 13px;
+  height: 13px;
+}
+
+.status svg {
   width: 13px;
   height: 13px;
 }

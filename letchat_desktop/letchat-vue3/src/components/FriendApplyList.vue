@@ -12,8 +12,19 @@
         </div>
         <div class="actions">
           <template v-if="item.status === 0">
-            <el-button size="small" type="primary" @click="deal(item.applyId, 1)">同意</el-button>
-            <el-button size="small" @click="deal(item.applyId, 2)">拒绝</el-button>
+            <el-button
+              size="small"
+              type="primary"
+              :loading="processingApplyId === item.applyId && processingStatus === 1"
+              :disabled="processingApplyId !== null"
+              @click="deal(item.applyId, 1)"
+            >同意</el-button>
+            <el-button
+              size="small"
+              :loading="processingApplyId === item.applyId && processingStatus === 2"
+              :disabled="processingApplyId !== null"
+              @click="deal(item.applyId, 2)"
+            >拒绝</el-button>
           </template>
           <el-tag v-else :type="statusType(item.status)">{{
             item.statusName || statusText(item.status)
@@ -21,13 +32,17 @@
         </div>
       </div>
 
-      <el-empty v-if="!loading && list.length === 0" description="暂无好友申请" />
+      <div v-if="!loading && error" class="apply-error" role="alert">
+        <span>{{ error }}</span>
+        <el-button size="small" @click="loadList">重试</el-button>
+      </div>
+      <el-empty v-else-if="!loading && list.length === 0" description="暂无好友申请" />
     </div>
   </el-dialog>
 </template>
 
 <script setup lang="ts">
-import { computed, ref, watch } from 'vue'
+import { computed, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import { contactApi } from '@/api/contact'
 import type { FriendApply } from '@/types/api'
@@ -45,22 +60,43 @@ const visible = computed({
 
 const loading = ref(false)
 const list = ref<FriendApply[]>([])
+const error = ref('')
+const processingApplyId = ref<number | null>(null)
+const processingStatus = ref<number | null>(null)
+let requestVersion = 0
 
 async function loadList() {
+  const currentRequestVersion = ++requestVersion
   loading.value = true
+  error.value = ''
   try {
     const response = await contactApi.loadApply(1)
-    list.value = response.data?.list || []
+    if (currentRequestVersion === requestVersion) list.value = response.data?.list || []
+  } catch {
+    if (currentRequestVersion === requestVersion) {
+      list.value = []
+      error.value = '好友申请加载失败，请重试'
+    }
   } finally {
-    loading.value = false
+    if (currentRequestVersion === requestVersion) loading.value = false
   }
 }
 
 async function deal(applyId: number, status: number) {
-  await contactApi.dealWithApply(applyId, status)
-  ElMessage.success(status === 1 ? '已同意申请' : '已拒绝申请')
-  await loadList()
-  emit('apply-processed')
+  if (processingApplyId.value !== null) return
+  processingApplyId.value = applyId
+  processingStatus.value = status
+  try {
+    await contactApi.dealWithApply(applyId, status)
+    ElMessage.success(status === 1 ? '已同意申请' : '已拒绝申请')
+    await loadList()
+    emit('apply-processed')
+  } catch {
+    error.value = '处理申请失败，请重试'
+  } finally {
+    processingApplyId.value = null
+    processingStatus.value = null
+  }
 }
 
 function statusText(status: number) {
@@ -83,9 +119,6 @@ function formatTime(value?: number) {
   })
 }
 
-watch(visible, (open) => {
-  if (open) loadList()
-})
 </script>
 
 <style scoped>
@@ -144,6 +177,16 @@ watch(visible, (open) => {
 .actions {
   display: flex;
   gap: 7px;
+}
+
+.apply-error {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 180px;
+  color: var(--lc-danger);
+  font-size: 13px;
 }
 
 @media (max-width: 520px) {
