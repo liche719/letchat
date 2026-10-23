@@ -10,6 +10,7 @@ import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
@@ -112,14 +113,15 @@ public class RedisComponent {
     //添加联系人
     public void addUserContact(String userId, String contactId) {
         List<String> contactIdList = getUserContactList(userId);
-        if (contactIdList.contains(contactId)) {
+        if (contactIdList != null && contactIdList.contains(contactId)) {
             return;
         }
         redisTemplate.opsForList().rightPush(Constants.REDIS_KEY_USER_CONTACT + userId, contactId);
     }
 
     public List<String> getUserContactList(String userId) {
-        return (List<String>) (List<?>) redisTemplate.opsForList().range(Constants.REDIS_KEY_USER_CONTACT + userId, 0, -1);
+        List<String> contactIdList = (List<String>) (List<?>) redisTemplate.opsForList().range(Constants.REDIS_KEY_USER_CONTACT + userId, 0, -1);
+        return contactIdList == null ? Collections.emptyList() : contactIdList;
     }
 
     public void removeUserContact(String userId, String contactId) {

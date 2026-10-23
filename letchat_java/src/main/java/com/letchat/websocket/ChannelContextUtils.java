@@ -20,6 +20,7 @@ import com.letchat.mappers.UserContactApplyMapper;
 import com.letchat.mappers.UserInfoMapper;
 import com.letchat.redis.RedisComponent;
 import com.letchat.utils.JsonUtils;
+import com.letchat.utils.CopyTools;
 import com.letchat.utils.StringTools;
 import io.netty.channel.Channel;
 import io.netty.channel.group.ChannelGroup;
@@ -32,6 +33,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.Resource;
+import java.util.Collections;
 import java.util.Date;
 import java.util.List;
 import java.util.concurrent.ConcurrentHashMap;
@@ -68,6 +70,9 @@ public class ChannelContextUtils {
         bindUserChannel(userId, channel);
 
         List<String> contactIdList = redisComponent.getUserContactList(userId);
+        if (contactIdList == null) {
+            contactIdList = Collections.emptyList();
+        }
         log.debug("Binding WebSocket groups, userId={}, contacts={}", userId, contactIdList);
         for (String groupId : contactIdList) {
             if (groupId.startsWith(UserContactTypeEnum.GROUP.getPrefix())) {
@@ -117,7 +122,7 @@ public class ChannelContextUtils {
          *3. 查询申请信息
          */
         UserContactApplyQuery applyQuery = new UserContactApplyQuery();
-        applyQuery.setApplyUserId(userId);
+        applyQuery.setReceiveUserId(userId);
         applyQuery.setLastApplyTimeStamp(lastOffTime);
         applyQuery.setStatus(UserContactApplyStatusEnum.INIT.getStatus());
         Integer applyCount = userContactApplyMapper.selectCount(applyQuery);
@@ -195,18 +200,22 @@ public class ChannelContextUtils {
         if (userChannel == null) {
             return;
         }
-        //相对客户端而言，联系人就是发送人，所以转换一下再发
-        if (messageSendDto.getMessageType().equals(MessageTypeEnum.ADD_FRIEND_SELF.getType())) {
-            UserInfo userInfo = (UserInfo) messageSendDto.getExtendData();
-            messageSendDto.setMessageType(MessageTypeEnum.ADD_FRIEND.getType());
-            messageSendDto.setContactId(userInfo.getUserId());
-            messageSendDto.setContactName(userInfo.getNickName());
-            messageSendDto.setExtendData(null);
-        } else {
-            messageSendDto.setContactId(messageSendDto.getSendUserId());
-            messageSendDto.setContactName(messageSendDto.getSendUserNickName());
+        MessageSendDto outboundMessage = CopyTools.copy(messageSendDto, MessageSendDto.class);
+        if (outboundMessage == null) {
+            return;
         }
-        userChannel.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
+        //相对客户端而言，联系人就是发送人，所以转换一下再发
+        if (MessageTypeEnum.ADD_FRIEND_SELF.getType().equals(outboundMessage.getMessageType())) {
+            UserInfo userInfo = (UserInfo) outboundMessage.getExtendData();
+            outboundMessage.setMessageType(MessageTypeEnum.ADD_FRIEND.getType());
+            outboundMessage.setContactId(userInfo.getUserId());
+            outboundMessage.setContactName(userInfo.getNickName());
+            outboundMessage.setExtendData(null);
+        } else if (!StringTools.isEmpty(outboundMessage.getSendUserId())) {
+            outboundMessage.setContactId(outboundMessage.getSendUserId());
+            outboundMessage.setContactName(outboundMessage.getSendUserNickName());
+        }
+        userChannel.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(outboundMessage)));
     }
 
     public void closeContext(String userId) {
@@ -227,21 +236,19 @@ public class ChannelContextUtils {
             return;
         }
         ChannelGroup channelGroup = GROUP_CONTEXT_MAP.get(messageSendDto.getContactId());
-        if (channelGroup == null) {
-            return;
+        MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(messageSendDto.getMessageType());
+        if (channelGroup != null) {
+            channelGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
         }
-        channelGroup.writeAndFlush(new TextWebSocketFrame(JsonUtils.convertObj2Json(messageSendDto)));
 
         //移除群组
-        MessageTypeEnum messageTypeEnum = MessageTypeEnum.getByType(messageSendDto.getMessageType());
         if (MessageTypeEnum.LEAVE_GROUP == messageTypeEnum || MessageTypeEnum.REMOVE_GROUP == messageTypeEnum) {
             String userId = (String) messageSendDto.getExtendData();
             redisComponent.removeUserContact(userId, messageSendDto.getContactId());
             Channel channel = USER_CONTEXT_MAP.get(userId);
-            if (channel == null) {
-                return;
+            if (channel != null && channelGroup != null) {
+                channelGroup.remove(channel);
             }
-            channelGroup.remove(channel);
         }
         if (MessageTypeEnum.DISSOLUTION_GROUP == messageTypeEnum) {
             removeGroup(messageSendDto.getContactId());
