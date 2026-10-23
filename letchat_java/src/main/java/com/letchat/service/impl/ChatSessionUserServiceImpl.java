@@ -1,5 +1,6 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.enums.MessageTypeEnum;
 import com.letchat.entity.enums.UserContactStatusEnum;
@@ -52,7 +53,7 @@ public class ChatSessionUserServiceImpl implements ChatSessionUserService {
             messageSendDto.setContactId(contactId);
             messageSendDto.setContactName(contactNameUpdate);
             messageSendDto.setMessageType(MessageTypeEnum.CONTACT_NAME_UPDATE.getType());
-            messageHandler.sendMessage(messageSendDto);
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
         } else {
             UserContactQuery userContactQuery = new UserContactQuery();
             userContactQuery.setContactType(UserContactTypeEnum.USER.getType());
@@ -67,7 +68,7 @@ public class ChatSessionUserServiceImpl implements ChatSessionUserService {
                 messageSendDto.setMessageType(MessageTypeEnum.CONTACT_NAME_UPDATE.getType());
                 messageSendDto.setSendUserId(contactId);
                 messageSendDto.setSendUserNickName(contactNameUpdate);
-                messageHandler.sendMessage(messageSendDto);
+                AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
             }
         }
     }

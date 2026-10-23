@@ -1,5 +1,6 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.dto.TokenUserInfoDto;
@@ -172,7 +173,9 @@ public class UserContactApplyServiceImpl implements UserContactApplyService {
             messageSendDto.setMessageType(MessageTypeEnum.CONTACT_APPLY.getType());
             messageSendDto.setMessageContent(applyInfo);
             messageSendDto.setContactId(receiverUserId);
-            messageHandler.sendMessage(messageSendDto);
+            messageSendDto.setSendUserId(applyUserId);
+            messageSendDto.setSendUserNickName(tokenUserInfoDto.getNickName());
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
         }
 
         return joinType;

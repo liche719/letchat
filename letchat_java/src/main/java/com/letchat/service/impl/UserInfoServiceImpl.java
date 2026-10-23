@@ -1,5 +1,6 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.config.AppConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.MessageSendDto;
@@ -281,7 +282,7 @@ public class UserInfoServiceImpl implements UserInfoService {
         messageSendDto.setContactId(userId);
         messageSendDto.setContactType(UserContactTypeEnum.USER.getType());
         messageSendDto.setMessageType(MessageTypeEnum.FORCE_OFF_LINE.getType());
-        messageHandler.sendMessage(messageSendDto);
+        AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
     }
 
 }

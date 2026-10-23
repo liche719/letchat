@@ -1,10 +1,12 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.entity.dto.MessageSendDto;
 import com.letchat.entity.dto.SysSettingDto;
 import com.letchat.entity.dto.UserContactSearchResultDto;
 import com.letchat.entity.enums.MessageStatusEnum;
 import com.letchat.entity.enums.MessageTypeEnum;
+import com.letchat.entity.enums.ResponseCodeEnum;
 import com.letchat.entity.enums.UserContactStatusEnum;
 import com.letchat.entity.enums.UserContactTypeEnum;
 import com.letchat.entity.po.*;
@@ -128,6 +130,9 @@ public class UserContactServiceImpl implements UserContactService {
     }
 
     @Override
+    // 加好友/入群一次会写联系人、会话、消息等多张表，必须同一个事务，
+    // 否则中途失败会留下「有会话没成员」这类脏数据。
+    @Transactional(rollbackFor = Exception.class)
     public void addContact(String applyUserId, String receiveUserId, String contactId, Integer contactType, String applyInfo) {
         //群聊人数
         if (UserContactTypeEnum.GROUP.getType().equals(contactType)) {
@@ -222,13 +227,13 @@ public class UserContactServiceImpl implements UserContactService {
 
             MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
             //发送消息给接收申请的人
-            messageHandler.sendMessage(messageSendDto);
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
 
             //发送消息给申请人
             messageSendDto.setMessageType(MessageTypeEnum.ADD_FRIEND_SELF.getType());
             messageSendDto.setContactId(applyUserId);
             messageSendDto.setExtendData(contactUserInfo);
-            messageHandler.sendMessage(messageSendDto);
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
         } else {
             UserInfo userInfo = this.userInfoMapper.selectByUserId(applyUserId);
             String sendMsg = String.format(MessageTypeEnum.ADD_GROUP.getInitMessage(), userInfo.getNickName());
@@ -272,13 +277,19 @@ public class UserContactServiceImpl implements UserContactService {
             messageSendDto.setMemberCount(memberCount);
             messageSendDto.setContactName(groupInfo.getGroupName());
             //发送消息
-            messageHandler.sendMessage(messageSendDto);
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
         }
     }
 
     @Override
     @Transactional(rollbackFor = Exception.class)
     public void removeUserContact(String userId, String contactId, UserContactStatusEnum statusEnum) {
+        UserContact existingContact = userContactMapper.selectByUserIdAndContactId(userId, contactId);
+        if (existingContact == null
+                || !UserContactStatusEnum.FRIEND.getStatus().equals(existingContact.getStatus())
+                || !UserContactTypeEnum.USER.getType().equals(existingContact.getContactType())) {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
+        }
         //移除好友
         UserContact userContact = new UserContact();
         userContact.setStatus(statusEnum.getStatus());
@@ -295,6 +306,20 @@ public class UserContactServiceImpl implements UserContactService {
 
         redisComponent.removeUserContact(userId, contactId);
         redisComponent.removeUserContact(contactId, userId);
+        chatSessionUserMapper.deleteByUserIdAndContactId(userId, contactId);
+        chatSessionUserMapper.deleteByUserIdAndContactId(contactId, userId);
+
+        UserInfo userInfo = userInfoMapper.selectByUserId(userId);
+        MessageSendDto messageSendDto = new MessageSendDto();
+        messageSendDto.setMessageType(MessageTypeEnum.CONTACT_REMOVED.getType());
+        messageSendDto.setContactType(UserContactTypeEnum.USER.getType());
+        messageSendDto.setContactId(contactId);
+        messageSendDto.setSendUserId(userId);
+        messageSendDto.setSendUserNickName(userInfo == null ? userId : userInfo.getNickName());
+        messageSendDto.setMessageContent(UserContactStatusEnum.BLACKLIST == statusEnum
+                ? "对方已将你加入黑名单"
+                : "对方已删除你");
+        AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
     }
 
     @Override

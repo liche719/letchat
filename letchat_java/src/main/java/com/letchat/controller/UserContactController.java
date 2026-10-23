@@ -19,6 +19,7 @@ import com.letchat.service.UserContactApplyService;
 import com.letchat.service.UserContactService;
 import com.letchat.service.UserInfoService;
 import org.apache.commons.lang3.ArrayUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.beans.BeanUtils;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -31,6 +32,7 @@ import java.util.List;
 
 @RestController("userContactController")
 @RequestMapping("/contact")
+@Validated
 public class UserContactController extends ABaseController {
 
     @Resource
@@ -91,7 +93,7 @@ public class UserContactController extends ABaseController {
      */
     @RequestMapping("/dealWithApply")
     @GlobalInterception
-    public ResponseVO dealWithApply(HttpServletRequest request, @NotNull Integer applyId, @NotEmpty Integer status) {
+    public ResponseVO dealWithApply(HttpServletRequest request, @NotNull Integer applyId, @NotNull Integer status) {
         TokenUserInfoDto tokenUserInfoDto = getTokenUserInfo(request);
         this.userContactApplyService.dealWithApply(tokenUserInfoDto.getUserId(), applyId, status);
         return getSuccessResponseVO(null);

@@ -1,6 +1,7 @@
 package com.letchat.mappers;
 
 import com.letchat.entity.po.ChatMessageOutbox;
+import org.apache.ibatis.annotations.Delete;
 import org.apache.ibatis.annotations.Insert;
 import org.apache.ibatis.annotations.Param;
 import org.apache.ibatis.annotations.Update;
@@ -9,6 +10,25 @@ import org.apache.ibatis.annotations.Select;
 import java.util.List;
 
 public interface ChatMessageOutboxMapper {
+
+    /**
+     * 待发布事件数量，用于积压告警。
+     */
+    @Select("SELECT COUNT(*) FROM chat_message_outbox WHERE status = 0")
+    long countPending();
+
+    /**
+     * 分批删除超过保留期、且已经成功发布（status = 1）的 outbox 记录。
+     *
+     * <p>故意不删 status = 2（重试耗尽）：那是需要人看和补偿的失败事件。
+     */
+    @Delete("""
+            DELETE FROM chat_message_outbox
+            WHERE status = 1
+              AND created_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL #{days} DAY)
+            LIMIT #{limit}
+            """)
+    int deleteFinishedBefore(@Param("days") int days, @Param("limit") int limit);
 
     @Insert("""
             INSERT INTO chat_message_outbox(
@@ -64,8 +84,8 @@ public interface ChatMessageOutboxMapper {
 
     @Update("""
             UPDATE chat_message_outbox
-            SET retry_count = retry_count + 1,
-                status = CASE WHEN retry_count + 1 >= #{maxRetries} THEN 2 ELSE 0 END,
+            SET status = CASE WHEN retry_count + 1 >= #{maxRetries} THEN 2 ELSE 0 END,
+                retry_count = retry_count + 1,
                 claim_token = NULL,
                 claimed_at = NULL,
                 next_retry_time = DATE_ADD(CURRENT_TIMESTAMP, INTERVAL #{delaySeconds} SECOND),

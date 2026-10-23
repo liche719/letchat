@@ -10,6 +10,7 @@ import com.letchat.redis.RedisComponent;
 import com.letchat.service.UserInfoService;
 import com.letchat.utils.CopyTools;
 import com.letchat.websocket.ChannelContextUtils;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -22,6 +23,7 @@ import java.io.IOException;
 
 @RestController("userInfoController")
 @RequestMapping("/userInfo")
+@Validated
 public class UserInfoController extends ABaseController {
 
     @Resource

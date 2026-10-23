@@ -6,6 +6,7 @@ import com.letchat.entity.query.UserInfoBeautyQuery;
 import com.letchat.entity.vo.PaginationResultVO;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.service.UserInfoBeautyService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -14,6 +15,7 @@ import jakarta.validation.constraints.NotNull;
 
 @RestController("adminUserInfoBeautyController")
 @RequestMapping("/admin")
+@Validated
 public class AdminUserInfoBeautyController extends ABaseController {
 
     @Resource

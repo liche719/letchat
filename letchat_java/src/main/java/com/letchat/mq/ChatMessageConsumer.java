@@ -16,6 +16,7 @@ import org.springframework.messaging.handler.annotation.Header;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import jakarta.annotation.PostConstruct;
 import jakarta.annotation.Resource;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
@@ -36,7 +37,20 @@ public class ChatMessageConsumer {
     @Resource
     private MessageHandler messageHandler;
 
-    private final ChatMessageRetryPolicy retryPolicy = new ChatMessageRetryPolicy();
+    @Resource
+    private com.letchat.metrics.ChatMetrics chatMetrics;
+
+    /** 重试次数可配置：之前硬编码 3，配置项改了也不生效。 */
+    @org.springframework.beans.factory.annotation.Value("${letchat.mq.max-retries:3}")
+    private int maxRetries = 3;
+
+    private ChatMessageRetryPolicy retryPolicy = new ChatMessageRetryPolicy();
+
+    @PostConstruct
+    void configureRetryPolicy() {
+        this.retryPolicy = new ChatMessageRetryPolicy(maxRetries);
+        log.info("Chat message consumer retry policy initialized, maxRetries={}", maxRetries);
+    }
 
     @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE, concurrency = "1")
     @RabbitListener(queues = RabbitMQConfig.CHAT_MESSAGE_QUEUE_1, concurrency = "1")
@@ -50,11 +64,8 @@ public class ChatMessageConsumer {
 
         try {
             ChatMessage chatMessage = parsePayload(payload);
-            boolean firstDelivery = deliverIdempotently(chatMessage);
+            deliverIdempotently(chatMessage);
             channel.basicAck(deliveryTag, false);
-            if (firstDelivery) {
-                log.debug("Delivered chat message notification, messageId={}", chatMessage.getMessageId());
-            }
         } catch (InvalidChatMessageException e) {
             log.warn("Rejecting invalid chat message to DLQ: {}", payload, e);
             channel.basicReject(deliveryTag, false);
@@ -65,15 +76,22 @@ public class ChatMessageConsumer {
 
     public boolean deliverIdempotently(ChatMessage chatMessage) {
         String eventId = eventId(chatMessage);
-        Boolean firstDelivery = transactionTemplate.execute(
-                status -> chatMessageInboxMapper.insertIfAbsent(eventId) == 1
-        );
-        if (!Boolean.TRUE.equals(firstDelivery)) {
-            log.debug("Skip duplicate chat notification, eventId={}", eventId);
-            return false;
+        Boolean firstDelivery = transactionTemplate.execute(status -> {
+            if (chatMessageInboxMapper.insertIfAbsent(eventId) != 1) {
+                log.debug("Skip duplicate chat notification, eventId={}", eventId);
+                return false;
+            }
+            // 推送与 inbox 去重记录放在同一个事务里：推送抛异常时去重记录一并回滚，
+            // broker 重投时这条消息仍会被当作首次投递重新推送。
+            // 否则「先提交去重记录、再推送」在推送失败后会让重投被判定为重复而直接 ack，
+            // 消息就永远到不了接收方。
+            messageHandler.sendMessage(CopyTools.copy(chatMessage, MessageSendDto.class));
+            return true;
+        });
+        if (Boolean.TRUE.equals(firstDelivery)) {
+            log.debug("Delivered chat message notification, messageId={}", chatMessage.getMessageId());
         }
-        messageHandler.sendMessage(CopyTools.copy(chatMessage, MessageSendDto.class));
-        return true;
+        return Boolean.TRUE.equals(firstDelivery);
     }
 
     private ChatMessage parsePayload(String payload) {
@@ -113,7 +131,9 @@ public class ChatMessageConsumer {
                                    String payload,
                                    Exception cause) throws IOException {
         if (!retryPolicy.canRetry(amqpMessage)) {
-            log.error("Chat message exceeded retry limit, routing to DLQ: {}", payload, cause);
+            // 不打印 payload：聊天正文不应进日志。eventId 足够定位，正文在死信表里
+            log.error("Chat message exceeded retry limit, routing to DLQ, eventId={}, retryCount={}",
+                    eventIdOf(amqpMessage), retryPolicy.getRetryCount(amqpMessage), cause);
             channel.basicReject(deliveryTag, false);
             return;
         }
@@ -121,15 +141,33 @@ public class ChatMessageConsumer {
         Message retryMessage = retryPolicy.buildRetryMessage(amqpMessage);
         try {
             chatMessageProducer.republishChatMessage(retryMessage);
+            chatMetrics.retried();
             channel.basicAck(deliveryTag, false);
-            log.warn("Republished chat message for retry, retryCount={}, payload={}",
+            log.warn("Republished chat message for retry, eventId={}, retryCount={}",
+                    eventIdOf(amqpMessage),
                     retryPolicy.getRetryCount(retryMessage),
-                    payload,
                     cause);
         } catch (Exception publishFailure) {
-            log.error("Failed to republish chat message retry, requeueing original payload={}", payload, publishFailure);
+            log.error("Failed to republish chat message retry, requeueing original, eventId={}",
+                    eventIdOf(amqpMessage), publishFailure);
             channel.basicNack(deliveryTag, false, true);
         }
+    }
+
+    private String eventIdOf(Message amqpMessage) {
+        try {
+            ChatMessage chatMessage = JsonUtils.convertJson2Obj(
+                    new String(amqpMessage.getBody(), StandardCharsets.UTF_8), ChatMessage.class);
+            if (chatMessage != null && chatMessage.getClientMessageId() != null) {
+                return chatMessage.getClientMessageId();
+            }
+            if (chatMessage != null && chatMessage.getMessageId() != null) {
+                return "message-" + chatMessage.getMessageId();
+            }
+        } catch (Exception ignored) {
+            // 解析失败不影响重试流程，日志里退回占位
+        }
+        return "unknown";
     }
 
     private static class InvalidChatMessageException extends RuntimeException {

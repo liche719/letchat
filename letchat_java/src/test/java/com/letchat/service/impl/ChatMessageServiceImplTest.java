@@ -1,6 +1,7 @@
 package com.letchat.service.impl;
 
 import com.letchat.entity.dto.SysSettingDto;
+import com.letchat.entity.enums.MessageTypeEnum;
 import com.letchat.entity.po.ChatMessage;
 import com.letchat.entity.po.ChatSession;
 import com.letchat.entity.dto.MessageSendDto;
@@ -61,6 +62,10 @@ class ChatMessageServiceImplTest {
     private ChatSessionMapper<ChatSession, ChatSessionQuery> chatSessionMapper;
 
     @Mock
+    private com.letchat.mappers.UserContactMapper<com.letchat.entity.po.UserContact,
+            com.letchat.entity.query.UserContactQuery> userContactMapper;
+
+    @Mock
     private MessageHandler messageHandler;
 
     @Mock
@@ -74,6 +79,23 @@ class ChatMessageServiceImplTest {
 
     @InjectMocks
     private ChatMessageServiceImpl chatMessageService;
+
+    @Test
+    void fallsBackToDatabaseAndRefillsCacheWhenContactCacheIsEmpty() {
+        String userId = "U1001";
+        com.letchat.entity.po.UserContact contact = new com.letchat.entity.po.UserContact();
+        contact.setContactId("U1002");
+        when(redisComponent.getUserContactList(userId)).thenReturn(Collections.emptyList());
+        when(userContactMapper.selectList(any(com.letchat.entity.query.UserContactQuery.class)))
+                .thenReturn(List.of(contact));
+
+        List<String> contactIds = chatMessageService.contactIdsOf(userId);
+
+        // Redis 被清空/丢数据时不能直接把用户判成无权限，必须回源并回填
+        assertEquals(List.of("U1002"), contactIds);
+        verify(redisComponent).clearUserContact(userId);
+        verify(redisComponent).addUserContactBatch(userId, List.of("U1002"));
+    }
 
     @Test
     void privateHistoryUsesIndexedSessionPagination() {
@@ -218,5 +240,10 @@ class ChatMessageServiceImplTest {
         verify(fileStorage, org.mockito.Mockito.times(2))
                 .put(any(String.class), any(), anyLong(), any());
         verify(chatMessageMapper).updateByParam(any(ChatMessage.class), any(ChatMessageQuery.class));
+        ArgumentCaptor<MessageSendDto> messageCaptor = ArgumentCaptor.forClass(MessageSendDto.class);
+        verify(messageHandler).sendMessage(messageCaptor.capture());
+        assertEquals(messageId, messageCaptor.getValue().getMessageId());
+        assertEquals("U1001", messageCaptor.getValue().getSendUserId());
+        assertEquals(MessageTypeEnum.FILE_UPLOAD.getType(), messageCaptor.getValue().getMessageType());
     }
 }

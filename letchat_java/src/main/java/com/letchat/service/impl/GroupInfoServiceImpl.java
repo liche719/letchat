@@ -1,5 +1,6 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.config.AppConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.MessageSendDto;
@@ -191,7 +192,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
             MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
             messageSendDto.setExtendData(chatSessionUser);
             messageSendDto.setLastMessage(MessageTypeEnum.GROUP_CREATE.getInitMessage());
-            messageHandler.sendMessage(messageSendDto);
+            AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
         } else {    //修改
             GroupInfo dbInfo = this.groupInfoMapper.selectByGroupId(groupInfo.getGroupId());
             //防止绕过前端，恶意发请求修改别人群组信息的风险
@@ -254,6 +255,7 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         List<UserContact> userContactList = this.userContactMapper.selectList(userContactQuery);
         for (UserContact userContact : userContactList) {
             redisComponent.removeUserContact(userContact.getUserId(), userContact.getContactId());
+            chatSessionUserMapper.deleteByUserIdAndContactId(userContact.getUserId(), groupId);
         }
 
         String sessionId = StringTools.getChatSessionId4Group(groupId);
@@ -275,10 +277,13 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         chatMessage.setStatus(MessageStatusEnum.SENT.getStatus());
         this.chatMessageMapper.insert(chatMessage);
         MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
-        messageHandler.sendMessage(messageSendDto);
+        AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
     }
 
     @Override
+    // 批量拉人/踢人必须整体成功或整体失败：逐个成员各自提交时，
+    // 中途失败会留下「加了一半」的群，且已推送的成员无法回退。
+    @Transactional(rollbackFor = Exception.class)
     public void addOrRemoveGroupUser(TokenUserInfoDto tokenUserInfoDto, String groupId, String selectContacts, Integer opType) {
         GroupInfo groupInfo = this.groupInfoMapper.selectByGroupId(groupId);
         if (null == groupInfo || !groupInfo.getGroupOwnerId().equals(tokenUserInfoDto.getUserId())) {
@@ -312,6 +317,8 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         if (null == userInfo) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
+        redisComponent.removeUserContact(userId, groupId);
+        chatSessionUserMapper.deleteByUserIdAndContactId(userId, groupId);
         String SessionId = StringTools.getChatSessionId4Group(groupId);
         Date curDate = new Date();
         String messageContent = String.format(messageTypeEnum.getInitMessage(), userInfo.getNickName());
@@ -339,6 +346,6 @@ public class GroupInfoServiceImpl implements GroupInfoService {
         MessageSendDto messageSendDto = CopyTools.copy(chatMessage, MessageSendDto.class);
         messageSendDto.setExtendData(userId);
         messageSendDto.setMemberCount(memberCount);
-        messageHandler.sendMessage(messageSendDto);
+        AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
     }
 }

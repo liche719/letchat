@@ -56,7 +56,8 @@ public class HandlerWebSocket extends SimpleChannelInboundHandler<TextWebSocketF
             channel.close();
             return;
         }
-        log.info("收到userId={}消息：{}", userId, textWebSocketFrame.text());
+        // 心跳帧只记长度，不落帧内容（避免用户数据进日志）
+        log.debug("收到心跳 userId={}, payloadLength={}", userId, textWebSocketFrame.text().length());
         redisComponent.saveHeartBeat(userId);
     }
 

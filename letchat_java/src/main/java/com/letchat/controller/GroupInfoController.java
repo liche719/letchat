@@ -14,6 +14,7 @@ import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
 import com.letchat.service.GroupInfoService;
 import com.letchat.service.UserContactService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -27,6 +28,7 @@ import java.util.List;
 
 @RestController("groupInfoController")
 @RequestMapping("/group")
+@Validated
 public class GroupInfoController extends ABaseController {
 
     @Resource

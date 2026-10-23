@@ -5,6 +5,7 @@ import com.letchat.entity.po.AppUpdate;
 import com.letchat.entity.query.AppUpdateQuery;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.service.AppUpdateService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
@@ -16,6 +17,7 @@ import java.io.IOException;
 
 @RestController("adminAppUpdateController")
 @RequestMapping("/admin")
+@Validated
 public class AdminAppUpdateController extends ABaseController {
 
     @Resource
@@ -35,7 +37,7 @@ public class AdminAppUpdateController extends ABaseController {
     public ResponseVO saveUpdate(Integer id,
                                  @NotEmpty String version,
                                  @NotEmpty String updateDesc,
-                                 @NotEmpty Integer fileType,
+                                 @NotNull Integer fileType,
                                  String outerLink,
                                  MultipartFile file) throws IOException {
         System.out.println("外链：" + outerLink);

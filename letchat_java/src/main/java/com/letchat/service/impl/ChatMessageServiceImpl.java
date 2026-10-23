@@ -1,5 +1,6 @@
 package com.letchat.service.impl;
 
+import com.letchat.utils.AfterCommitUtils;
 import com.letchat.config.RabbitMQConfig;
 import com.letchat.entity.Constants;
 import com.letchat.entity.dto.MessageSendDto;
@@ -43,9 +44,12 @@ import org.springframework.web.multipart.MultipartFile;
 
 import jakarta.annotation.Resource;
 import java.io.IOException;
+import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
 
 /**
@@ -159,7 +163,7 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         if (contactType == null) {
             throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
-        List<String> contactIds = redisComponent.getUserContactList(userId);
+        List<String> contactIds = contactIdsOf(userId);
         if (contactIds == null || !contactIds.contains(contactId)) {
             throw new BusinessException(UserContactTypeEnum.USER == contactType
                     ? ResponseCodeEnum.CODE_902
@@ -170,6 +174,31 @@ public class ChatMessageServiceImpl implements ChatMessageService {
                 : StringTools.getChatSessionId4Group(contactId);
     }
 
+    /**
+     * 取用户联系人列表，缓存缺失时回源数据库并回填。
+     *
+     * <p>原来的实现只信 Redis：一旦 Redis 被清空、主从切换丢数据或 key 过期，
+     * 所有用户都会被判定成"不是好友"，整个聊天功能不可用，直到重新登录把缓存重建。
+     */
+    List<String> contactIdsOf(String userId) {
+        List<String> cached = redisComponent.getUserContactList(userId);
+        if (cached != null && !cached.isEmpty()) {
+            return cached;
+        }
+        UserContactQuery query = new UserContactQuery();
+        query.setUserId(userId);
+        query.setStatus(UserContactStatusEnum.FRIEND.getStatus());
+        List<UserContact> contacts = userContactMapper.selectList(query);
+        List<String> contactIds = contacts == null ? new ArrayList<>()
+                : contacts.stream().map(UserContact::getContactId).collect(Collectors.toList());
+        if (!contactIds.isEmpty()) {
+            redisComponent.clearUserContact(userId);
+            redisComponent.addUserContactBatch(userId, contactIds);
+            log.info("回源联系人列表并回填缓存，userId={}, size={}", userId, contactIds.size());
+        }
+        return contactIds;
+    }
+
     @Override
     @Transactional(rollbackFor = Exception.class)
     public MessageSendDto saveMessage(ChatMessage chatMessage) {
@@ -177,8 +206,8 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         String contactId = chatMessage.getContactId();
         //不是机器人回复，判断好友状态
         if (!Constants.ROBOT_UID.equals(sendUserId)) {
-            List<String> contactIdList = redisComponent.getUserContactList(sendUserId);
-            if (!contactIdList.contains(chatMessage.getContactId())) {
+            List<String> contactIdList = contactIdsOf(sendUserId);
+            if (contactIdList == null || !contactIdList.contains(chatMessage.getContactId())) {
                 UserContactTypeEnum userContactStatusEnum = UserContactTypeEnum.getByPrefix(chatMessage.getContactId());
                 if (UserContactTypeEnum.USER == userContactStatusEnum) {
                     throw new BusinessException(ResponseCodeEnum.CODE_902);
@@ -195,8 +224,10 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         // 存sessionId
         if (UserContactTypeEnum.USER == userContactTypeEnum) {
             sessionId = StringTools.getChatSessionId4User(new String[]{sendUserId, contactId});
-        } else {
+        } else if (UserContactTypeEnum.GROUP == userContactTypeEnum) {
             sessionId = StringTools.getChatSessionId4Group(contactId);
+        } else {
+            throw new BusinessException(ResponseCodeEnum.CODE_600);
         }
         chatMessage.setSessionId(sessionId);
 
@@ -302,9 +333,12 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         String month = DateUtil.format(new Date(chatMessage.getSendTime()), DateTimePatternEnum.YYYYMM.getPattern());
         String objectKey = messageObjectKey(month, messageId, fileExName, false);
         String coverObjectKey = messageObjectKey(month, messageId, fileExName, true);
-        try {
-            fileStorage.put(objectKey, file.getInputStream(), file.getSize(), file.getContentType());
-            fileStorage.put(coverObjectKey, coverFile.getInputStream(), coverFile.getSize(), coverFile.getContentType());
+        // MultipartFile 的流由调用方负责关闭：对象存储客户端只消费不关闭，
+        // 原来把 getInputStream() 直接传进去，每次上传会泄漏两个文件描述符。
+        try (InputStream contentStream = file.getInputStream();
+             InputStream coverStream = coverFile.getInputStream()) {
+            fileStorage.put(objectKey, contentStream, file.getSize(), file.getContentType());
+            fileStorage.put(coverObjectKey, coverStream, coverFile.getSize(), coverFile.getContentType());
         } catch (IOException e) {
             log.error("上传文件失败", e);
             throw new BusinessException("上传文件失败");
@@ -323,8 +357,19 @@ public class ChatMessageServiceImpl implements ChatMessageService {
         messageSendDto.setStatus(MessageStatusEnum.SENT.getStatus());
         messageSendDto.setMessageId(messageId);
         messageSendDto.setContactId(chatMessage.getContactId());
+        messageSendDto.setContactType(chatMessage.getContactType());
+        messageSendDto.setSessionId(chatMessage.getSessionId());
+        messageSendDto.setSendTime(chatMessage.getSendTime());
+        messageSendDto.setClientMessageId(chatMessage.getClientMessageId());
+        messageSendDto.setSequenceNo(chatMessage.getSequenceNo());
+        messageSendDto.setSendUserId(userId);
+        messageSendDto.setSendUserNickName(chatMessage.getSendUserNickName());
+        messageSendDto.setMessageContent(chatMessage.getMessageContent());
+        messageSendDto.setFileSize(file.getSize());
+        messageSendDto.setFileName(fileName);
+        messageSendDto.setFileType(MessageTypeEnum.MEDIA_CHAT.getType());
         messageSendDto.setMessageType(MessageTypeEnum.FILE_UPLOAD.getType());
-        messageHandler.sendMessage(messageSendDto);
+        AfterCommitUtils.run(() -> messageHandler.sendMessage(messageSendDto));
     }
 
     @Override

@@ -8,6 +8,7 @@ import com.letchat.entity.vo.PaginationResultVO;
 import com.letchat.entity.vo.ResponseVO;
 import com.letchat.exception.BusinessException;
 import com.letchat.service.GroupInfoService;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -16,6 +17,7 @@ import jakarta.validation.constraints.NotEmpty;
 
 @RestController("adminGroupController")
 @RequestMapping("/admin")
+@Validated
 public class AdminGroupController extends ABaseController {
 
     @Resource

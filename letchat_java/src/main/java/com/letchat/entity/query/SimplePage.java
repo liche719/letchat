@@ -5,6 +5,9 @@ import lombok.Data;
 
 @Data
 public class SimplePage {
+    /** 请求可控的分页大小上限。 */
+    public static final int MAX_PAGE_SIZE = 100;
+
     private int pageNo;
     private int countTotal;
     private int pageSize;
@@ -33,6 +36,10 @@ public class SimplePage {
     public void action() {
         if (this.pageSize <= 0) {
             this.pageSize = PageSize.SIZE20.getSize();
+        }
+        // 分页大小来自请求参数时必须 clamp：否则传 pageSize=1000000 会一次拉全表进内存。
+        if (this.pageSize > MAX_PAGE_SIZE) {
+            this.pageSize = MAX_PAGE_SIZE;
         }
         if (this.countTotal > 0) {
             this.pageTotal = this.countTotal % this.pageSize == 0 ? this.countTotal / this.pageSize
